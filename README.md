@@ -11,15 +11,17 @@ HTML grammar for [tree-sitter](https://github.com/tree-sitter/tree-sitter), fork
 to its authors and contributors. This is not an official release of that project.
 
 This fork keeps the grammar and the external scanner of upstream's version 0.23.2 and generates the parser with the
-[WillBooster/tree-sitter](https://github.com/WillBooster/tree-sitter) generator at ABI 16, whose compact parse tables
-need that fork's runtime. Input that contains NUL characters can parse to a different tree than with upstream's 0.23.2 parser,
-because the lexers that generator emits treat a NUL character as an ordinary character; other input parses to the same
-tree.
+[WillBooster/tree-sitter](https://github.com/WillBooster/tree-sitter) generator. The parser carries that fork's own ABI
+number, so it loads only with the WillBooster runtime, version 2.0.0 or later
+([willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter),
+[@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter)); upstream's runtime rejects
+it. Input that contains NUL characters can parse to a different tree than with upstream's 0.23.2 parser, because the
+lexers that generator emits treat a NUL character as an ordinary character; other input parses to the same tree.
 
 ## Usage
 
 The npm package ships `tree-sitter-html.wasm` for
-[@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter) version 1.4.3 or later, which runs in Node.js, Bun, browsers, and Cloudflare Workers. In Node.js and Bun, load the grammar from its path:
+[@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter) version 2.0.0 or later, which runs in Node.js, Bun, browsers, and Cloudflare Workers. In Node.js and Bun, load the grammar from its path:
 
 ```js
 import { fileURLToPath } from 'node:url';
@@ -65,7 +67,7 @@ fuzzed with:
 
 ```toml
 [dependencies]
-tree-sitter = { package = "willbooster-tree-sitter", version = "1.4.3" }
+tree-sitter = { package = "willbooster-tree-sitter", version = "2.0.0" }
 tree-sitter-html = { package = "willbooster-tree-sitter-html", version = "1" }
 ```
 
@@ -92,7 +94,7 @@ not the ones this package ships with. Its first run downloads that CLI from the 
 with `cargo` (whose build runs the CMake that `mise.toml` pins) when the download fails or the release has no binary that runs here. Run other CLI commands through it as
 well (e.g. `script/tree-sitter parse file.html`).
 
-`bun run generate` records a fresh ABI 16 generation profile from the applicable `test/corpus` cases and Git-tracked
+`bun run generate` records a fresh generation profile from the applicable `test/corpus` cases and Git-tracked
 files in `examples/`, then generates compact parser tables. The parser also embeds metadata from `tree-sitter.json`. After changing a grammar,
 `tree-sitter.json`, a corpus case, or a tracked example,
 regenerate and commit `src/`. Stage added or removed examples with `git add -A examples` before generation so the profile uses the intended file list.
