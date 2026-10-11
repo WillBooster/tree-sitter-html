@@ -1,0 +1,6 @@
+# script/generate writes these files, so GitHub collapses their diffs and leaves them out of the language statistics.
+# Kept here because the root .gitattributes is generated. scanner.c and tag.h are written by hand.
+grammar.json linguist-generated
+node-types.json linguist-generated
+parser.c linguist-generated
+tree_sitter/* linguist-generated
