@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+
+# Parses real-world HTML files cloned into examples/ and rewrites script/known-failures.txt, the list of
+# files that fail to parse. With --check, fails instead when that list would change.
+
+set -euo pipefail
+
+check=false
+if [[ ${1-} == --check ]]; then
+  check=true
+fi
+
+# Each example repository is pinned to a commit so that the list of failures changes only with the grammar.
+# Moving a pin requires running this script without --check to update the list. The checkouts under
+# examples/ belong to this script: local changes there are discarded so that the pinned files are parsed.
+# The hosts occasionally answer with a server error, so each fetch is retried in place.
+clone() {
+  local dir=examples/$1
+  if [[ $(git -C "$dir" rev-parse HEAD 2> /dev/null) != "$3" ]]; then
+    if [[ ! -d $dir/.git ]]; then
+      rm -rf "$dir"
+      git init -q "$dir"
+    fi
+    local attempt
+    for attempt in 1 2 3 4; do
+      if git -C "$dir" fetch -q --depth=1 "$2" "$3"; then
+        break
+      fi
+      if [[ $attempt == 4 ]]; then
+        return 1
+      fi
+      sleep $((attempt * 15))
+    done
+    git -C "$dir" checkout -q -f --detach "$3"
+  fi
+  git -C "$dir" reset -q --hard
+  git -C "$dir" clean -q -ffdx
+}
+
+cd "$(dirname "$0")/.."
+# The CLI caches compiled parsers by language name in a directory shared by every checkout and reuses one that is newer
+# than the sources, so this checkout's parser is compiled into a cache of its own.
+export TREE_SITTER_LIBDIR=$PWD/.tmp/tree-sitter-lib
+
+clone bootstrap https://github.com/twbs/bootstrap 25aa8cc0b32f0d1a54be575347e6d84b70b1acd7
+clone dom-examples https://github.com/mdn/dom-examples f49fdb84422425b24c716d1eeaf8d408b9d7f710
+clone ecma262 https://github.com/tc39/ecma262 5345883164f463e87f8b40aca4956157ecba8783
+clone learning-area https://github.com/mdn/learning-area d55e1c2e3ff401519811b64e5b2a7d3643b43d0f
+
+files=$(mktemp)
+output=$(mktemp)
+failures=$(mktemp)
+trap 'rm -f "$files" "$output" "$failures"' EXIT
+
+find examples -type f -name '*.html' -print | LC_ALL=C sort > "$files"
+
+# The CLI exits non-zero whenever a file fails, so the output decides success. `--time` makes it print
+# a line for each file, including files that exceed `--timeout` (30 s), which bounds a runaway parse. The largest
+# file, the 3 MB ECMAScript specification, takes well under a second alone and longer beside the other tests.
+script/tree-sitter parse --grammar-path . -q -s --time --timeout 30000000 \
+  --paths "$files" > "$output" || true
+if ! grep -q '^Total parses' "$output"; then
+  cat "$output" >&2
+  exit 1
+fi
+grep '^Total parses' "$output"
+# A timeout depends on the machine, so it is no expected failure.
+if grep -q 'timed out' "$output"; then
+  echo 'These files exceeded the parse timeout; known-failures.txt is left unchanged:' >&2
+  awk '/timed out/{print $1}' "$output" >&2
+  exit 1
+fi
+awk '/ERROR|MISSING/{print $1}' "$output" | LC_ALL=C sort > "$failures"
+if [[ $check == true ]]; then
+  if ! diff -u script/known-failures.txt "$failures" >&2; then
+    echo 'The files failing to parse differ from script/known-failures.txt (- fixed, + broken).' >&2
+    echo 'Run script/parse-examples to update the list after checking the diff.' >&2
+    exit 1
+  fi
+else
+  cp "$failures" script/known-failures.txt
+fi
