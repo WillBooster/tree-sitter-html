@@ -435,7 +435,7 @@ Raw text closing tags followed by whitespace
   (element (start_tag (tag_name)) (text) (end_tag (tag_name))))
 
 ==================================
-Unterminated script: empty
+Unterminated script: newline-only content
 ==================================
 <script>
 
@@ -453,7 +453,7 @@ Unterminated script: prefix
 (document (script_element (start_tag (tag_name)) (raw_text)))
 
 ==================================
-Unterminated script: non-boundary
+Unterminated script: vertical tab after the tag name
 ==================================
 <script>x</script><p>still raw</p>
 
@@ -462,7 +462,7 @@ Unterminated script: non-boundary
 (document (script_element (start_tag (tag_name)) (raw_text)))
 
 ==================================
-Unterminated style: empty
+Unterminated style: newline-only content
 ==================================
 <style>
 
@@ -480,7 +480,7 @@ Unterminated style: prefix
 (document (style_element (start_tag (tag_name)) (raw_text)))
 
 ==================================
-Unterminated style: non-boundary
+Unterminated style: vertical tab after the tag name
 ==================================
 <style>x</style><p>still raw</p>
 

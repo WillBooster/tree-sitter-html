@@ -19,7 +19,7 @@ it. Input that contains NUL characters can parse to a different tree than with u
 lexers that generator emits treat a NUL character as an ordinary character. This grammar also accepts literal `>`
 characters in text nodes, which upstream 0.23.2 rejects. Its scanner requires a tag-name boundary after
 `</script` and `</style`, so longer names and literal prefixes remain raw text. Unclosed script and style elements
-retain their raw-text nodes through EOF for language injection.
+retain their content through EOF for language injection.
 
 ## Usage
 
