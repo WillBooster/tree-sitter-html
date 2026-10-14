@@ -17,7 +17,8 @@ number, so it loads only with the WillBooster runtime, version 2.0.0 or later
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter)); upstream's runtime rejects
 it. Input that contains NUL characters can parse to a different tree than with upstream's 0.23.2 parser, because the
 lexers that generator emits treat a NUL character as an ordinary character. This grammar also accepts literal `>`
-characters in text nodes, which upstream 0.23.2 rejects.
+characters in text nodes, which upstream 0.23.2 rejects. Its scanner requires a tag-name boundary after
+`</script` and `</style`, so longer names and literal prefixes remain raw text.
 
 ## Usage
 

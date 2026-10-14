@@ -149,19 +149,23 @@ static bool scan_raw_text(Scanner *scanner, TSLexer *lexer) {
 
     const char *end_delimiter = array_back(&scanner->tags)->type == SCRIPT ? "</SCRIPT" : "</STYLE";
 
-    unsigned delimiter_index = 0;
     while (lexer->lookahead) {
-        if (towupper(lexer->lookahead) == end_delimiter[delimiter_index]) {
+        unsigned delimiter_index = 0;
+        while (end_delimiter[delimiter_index] &&
+               towupper(lexer->lookahead) == end_delimiter[delimiter_index]) {
+            advance(lexer);
             delimiter_index++;
-            if (delimiter_index == strlen(end_delimiter)) {
-                break;
-            }
-            advance(lexer);
-        } else {
-            delimiter_index = 0;
-            advance(lexer);
-            lexer->mark_end(lexer);
         }
+        if (!end_delimiter[delimiter_index] &&
+            (lexer->lookahead == '>' || lexer->lookahead == '/' || lexer->lookahead == ' ' ||
+             lexer->lookahead == '\t' || lexer->lookahead == '\n' || lexer->lookahead == '\r' ||
+             lexer->lookahead == '\f')) {
+            break;
+        }
+        if (delimiter_index == 0) {
+            advance(lexer);
+        }
+        lexer->mark_end(lexer);
     }
 
     lexer->result_symbol = RAW_TEXT;
