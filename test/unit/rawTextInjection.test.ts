@@ -88,3 +88,43 @@ for (const tag of ['script', 'style']) {
     }
   });
 }
+
+for (const tag of ['script', 'style']) {
+  test(`preserves ${tag} injections after non-letter less-than text`, () => {
+    const parser = new Parser();
+    parser.setLanguage(language);
+    const query = new Query(language, querySource);
+    try {
+      for (const prefix of ['-', '3', ':', 'é']) {
+        const tree = parser.parse(`<${prefix}<${tag}>x</${tag}>`)!;
+        try {
+          expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual(['x']);
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      query.delete();
+      parser.delete();
+    }
+  });
+}
+
+test('preserves enclosing elements around non-letter less-than text', () => {
+  const parser = new Parser();
+  parser.setLanguage(language);
+  try {
+    for (const prefix of ['-', '3', ':', 'é']) {
+      const tree = parser.parse(`<div>a <${prefix} b</div><p>c</p>`)!;
+      try {
+        expect(
+          tree.rootNode.descendantsOfType('element').map((node) => node.firstNamedChild?.firstNamedChild?.text)
+        ).toEqual(['div', 'p']);
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});

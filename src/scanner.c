@@ -102,7 +102,8 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
 
 static String scan_tag_name(TSLexer *lexer) {
     String tag_name = array_new();
-    if (!iswalnum(lexer->lookahead) && lexer->lookahead != '-' && lexer->lookahead != ':') {
+    if (!((lexer->lookahead >= 'a' && lexer->lookahead <= 'z') ||
+          (lexer->lookahead >= 'A' && lexer->lookahead <= 'Z'))) {
         return tag_name;
     }
     while (lexer->lookahead) {
