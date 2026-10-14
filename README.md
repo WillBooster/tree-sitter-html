@@ -10,13 +10,14 @@ HTML grammar for [tree-sitter](https://github.com/tree-sitter/tree-sitter), fork
 [tree-sitter/tree-sitter-html](https://github.com/tree-sitter/tree-sitter-html). We are grateful
 to its authors and contributors. This is not an official release of that project.
 
-This fork keeps the grammar and the external scanner of upstream's version 0.23.2 and generates the parser with the
+This fork is based on upstream's version 0.23.2 grammar and external scanner and generates the parser with the
 [WillBooster/tree-sitter](https://github.com/WillBooster/tree-sitter) generator. The parser carries that fork's own ABI
 number, so it loads only with the WillBooster runtime, version 2.0.0 or later
 ([willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter),
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter)); upstream's runtime rejects
 it. Input that contains NUL characters can parse to a different tree than with upstream's 0.23.2 parser, because the
-lexers that generator emits treat a NUL character as an ordinary character; other input parses to the same tree.
+lexers that generator emits treat a NUL character as an ordinary character. This grammar also accepts literal `>`
+characters in text nodes, which upstream 0.23.2 rejects.
 
 ## Usage
 

@@ -380,3 +380,17 @@ Omitted end tags for html and head
     (element
       (start_tag
         (tag_name)))))
+
+==================================
+Greater-than signs in text
+==================================
+<p>2 > 1</p><p>></p><p>> leading</p><p>trailing ></p><p>a&gt;b > c</p>
+
+---
+
+(document
+  (element (start_tag (tag_name)) (text) (end_tag (tag_name)))
+  (element (start_tag (tag_name)) (text) (end_tag (tag_name)))
+  (element (start_tag (tag_name)) (text) (end_tag (tag_name)))
+  (element (start_tag (tag_name)) (text) (end_tag (tag_name)))
+  (element (start_tag (tag_name)) (text) (entity) (text) (end_tag (tag_name))))
