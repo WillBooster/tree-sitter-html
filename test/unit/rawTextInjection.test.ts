@@ -41,3 +41,36 @@ for (const tag of ['script', 'style']) {
     }
   });
 }
+
+for (const tag of ['script', 'style']) {
+  test(`does not inject ${tag} into elements with longer names`, () => {
+    const parser = new Parser();
+    parser.setLanguage(language);
+    const query = new Query(language, querySource);
+    try {
+      for (const suffix of ['!x', '<', '\v', '\u00A0']) {
+        const name = `${tag}${suffix}`;
+        const tree = parser.parse(`<${name}>text</${name}>`)!;
+        try {
+          expect(tree.rootNode.hasError).toBe(false);
+          expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual(['element']);
+          expect(tree.rootNode.firstNamedChild?.firstNamedChild?.firstNamedChild?.text).toBe(name);
+          expect(query.captures(tree.rootNode)).toEqual([]);
+        } finally {
+          tree.delete();
+        }
+      }
+      for (const source of [`<${tag}!x>y`, `<${tag}</div>a</div>b`]) {
+        const tree = parser.parse(source)!;
+        try {
+          expect(query.captures(tree.rootNode)).toEqual([]);
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      query.delete();
+      parser.delete();
+    }
+  });
+}
