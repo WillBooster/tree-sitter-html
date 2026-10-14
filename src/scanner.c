@@ -184,12 +184,10 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     if (lexer->lookahead == '/') {
         is_closing_tag = true;
         advance(lexer);
-    } else {
-        if (parent && tag_is_void(parent)) {
-            pop_tag(scanner);
-            lexer->result_symbol = IMPLICIT_END_TAG;
-            return true;
-        }
+    } else if (parent && tag_is_void(parent)) {
+        pop_tag(scanner);
+        lexer->result_symbol = IMPLICIT_END_TAG;
+        return true;
     }
 
     String tag_name = scan_tag_name(lexer);
@@ -201,7 +199,6 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     Tag next_tag = tag_for_name(tag_name);
 
     if (is_closing_tag) {
-        // The tag correctly closes the topmost element on the stack
         if (scanner->tags.size > 0 && tag_eq(array_back(&scanner->tags), &next_tag)) {
             tag_free(&next_tag);
             return false;
@@ -221,7 +218,8 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
         parent &&
         (
             !tag_can_contain(parent, &next_tag) ||
-            ((parent->type == HTML || parent->type == HEAD || parent->type == BODY) && lexer->eof(lexer))
+            ((parent->type == HTML || parent->type == HEAD || parent->type == BODY ||
+              parent->type == SCRIPT || parent->type == STYLE) && lexer->eof(lexer))
         )
     ) {
         pop_tag(scanner);
@@ -291,7 +289,8 @@ static bool scan_self_closing_tag_delimiter(Scanner *scanner, TSLexer *lexer) {
 }
 
 static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
-    if (valid_symbols[RAW_TEXT] && !valid_symbols[START_TAG_NAME] && !valid_symbols[END_TAG_NAME]) {
+    if (valid_symbols[RAW_TEXT] && !valid_symbols[START_TAG_NAME] && !valid_symbols[END_TAG_NAME] &&
+        !lexer->eof(lexer)) {
         return scan_raw_text(scanner, lexer);
     }
 

@@ -62,13 +62,13 @@ module.exports = grammar({
     script_element: $ => seq(
       alias($.script_start_tag, $.start_tag),
       optional($.raw_text),
-      $.end_tag,
+      choice($.end_tag, $._implicit_end_tag),
     ),
 
     style_element: $ => seq(
       alias($.style_start_tag, $.start_tag),
       optional($.raw_text),
-      $.end_tag,
+      choice($.end_tag, $._implicit_end_tag),
     ),
 
     start_tag: $ => seq(

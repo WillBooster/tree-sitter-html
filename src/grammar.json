@@ -135,8 +135,17 @@
           ]
         },
         {
-          "type": "SYMBOL",
-          "name": "end_tag"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "end_tag"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_implicit_end_tag"
+            }
+          ]
         }
       ]
     },
@@ -165,8 +174,17 @@
           ]
         },
         {
-          "type": "SYMBOL",
-          "name": "end_tag"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "end_tag"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_implicit_end_tag"
+            }
+          ]
         }
       ]
     },
