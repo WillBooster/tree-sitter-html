@@ -43,7 +43,7 @@ for (const tag of ['script', 'style']) {
 }
 
 for (const tag of ['script', 'style']) {
-  test(`does not inject ${tag} into elements with longer names`, () => {
+  test(`does not inject ${tag} into custom names or markup inside tags`, () => {
     const parser = new Parser();
     parser.setLanguage(language);
     const query = new Query(language, querySource);
@@ -60,13 +60,27 @@ for (const tag of ['script', 'style']) {
           tree.delete();
         }
       }
-      for (const source of [`<${tag}!x>y`, `<${tag}</div>a</div>b`]) {
+      for (const source of [
+        `<${tag}!x>y`,
+        `<${tag}</div>a</div>b`,
+        `<div =<${tag}><div>`,
+        `</${tag}<<${tag}>. <`,
+        `<div <${tag}>text</${tag}>`,
+        `<div a=<${tag}>text</div>`,
+      ]) {
         const tree = parser.parse(source)!;
         try {
           expect(query.captures(tree.rootNode)).toEqual([]);
         } finally {
           tree.delete();
         }
+      }
+      const control = parser.parse(`<div =<${tag}></div><${tag} data-x="<other>">real`)!;
+      try {
+        expect(control.rootNode.hasError).toBe(false);
+        expect(query.captures(control.rootNode).map(({ node }) => node.text)).toEqual(['real']);
+      } finally {
+        control.delete();
       }
     } finally {
       query.delete();

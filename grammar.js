@@ -114,7 +114,7 @@ module.exports = grammar({
     attribute: $ => seq(
       $.attribute_name,
       optional(seq(
-        '=',
+        token(prec(1, '=')),
         choice(
           $.attribute_value,
           $.quoted_attribute_value,
@@ -122,9 +122,9 @@ module.exports = grammar({
       )),
     ),
 
-    attribute_name: _ => /[^<>"'/=\s]+/,
+    attribute_name: _ => /[^/=\t\n\f\r >]+|=[^/=\t\n\f\r >]*/,
 
-    attribute_value: _ => /[^<>"'=\s]+/,
+    attribute_value: _ => /[^ \t\n\f\r>"'][^ \t\n\f\r>]*/,
 
     // HTML fixes the named-reference set: https://html.spec.whatwg.org/multipage/named-characters.html
     entity: _ => /&(#([xX][0-9a-fA-F]{1,6}|[0-9]{1,5})|[A-Za-z]{1,30});?/,

@@ -357,8 +357,15 @@
               "type": "SEQ",
               "members": [
                 {
-                  "type": "STRING",
-                  "value": "="
+                  "type": "TOKEN",
+                  "content": {
+                    "type": "PREC",
+                    "value": 1,
+                    "content": {
+                      "type": "STRING",
+                      "value": "="
+                    }
+                  }
                 },
                 {
                   "type": "CHOICE",
@@ -384,11 +391,11 @@
     },
     "attribute_name": {
       "type": "PATTERN",
-      "value": "[^<>\"'/=\\s]+"
+      "value": "[^/=\\t\\n\\f\\r >]+|=[^/=\\t\\n\\f\\r >]*"
     },
     "attribute_value": {
       "type": "PATTERN",
-      "value": "[^<>\"'=\\s]+"
+      "value": "[^ \\t\\n\\f\\r>\"'][^ \\t\\n\\f\\r>]*"
     },
     "entity": {
       "type": "PATTERN",

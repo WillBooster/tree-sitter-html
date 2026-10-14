@@ -18,7 +18,8 @@ number, so it loads only with the WillBooster runtime, version 2.0.0 or later
 it. Input that contains NUL characters can parse to a different tree than with upstream's 0.23.2 parser, because the
 lexers that generator emits treat a NUL character as an ordinary character. This grammar also accepts literal `>`
 characters in text nodes, which upstream 0.23.2 rejects. Tag names retain punctuation and non-HTML whitespace
-until an HTML delimiter, so names such as `script!x` remain custom elements. Its scanner requires a tag-name boundary after
+until an HTML delimiter, so names such as `script!x` remain custom elements. Attribute tokens retain literal `<`
+characters instead of recovering them as nested tags. Its scanner requires a tag-name boundary after
 `</script` and `</style`, so longer names and literal prefixes remain raw text. Unclosed script and style elements
 retain their content through EOF for language injection.
 

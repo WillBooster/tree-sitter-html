@@ -334,7 +334,8 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
             break;
 
         default:
-            if ((valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME]) && !valid_symbols[RAW_TEXT]) {
+            if ((valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME] ||
+                 valid_symbols[ERRONEOUS_END_TAG_NAME]) && !valid_symbols[RAW_TEXT]) {
                 return valid_symbols[START_TAG_NAME] ? scan_start_tag_name(scanner, lexer)
                                                      : scan_end_tag_name(scanner, lexer);
             }
