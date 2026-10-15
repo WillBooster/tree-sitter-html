@@ -157,7 +157,7 @@ static String scan_tag_name(TSLexer *lexer) {
     if (!is_ascii_letter(lexer->lookahead)) {
         return tag_name;
     }
-    while (lexer->lookahead) {
+    while (!lexer->eof(lexer)) {
         switch (lexer->lookahead) {
             case '\t': case '\n': case '\f': case '\r': case ' ': case '/': case '>':
                 return tag_name;
@@ -180,7 +180,7 @@ static bool scan_comment(TSLexer *lexer) {
     advance(lexer);
 
     unsigned dashes = 0;
-    while (lexer->lookahead) {
+    while (!lexer->eof(lexer)) {
         switch (lexer->lookahead) {
             case '-':
                 ++dashes;
@@ -209,7 +209,7 @@ static bool scan_raw_text(Scanner *scanner, TSLexer *lexer) {
 
     const char *end_delimiter = array_back(&scanner->tags)->type == SCRIPT ? "</SCRIPT" : "</STYLE";
 
-    while (lexer->lookahead) {
+    while (!lexer->eof(lexer)) {
         unsigned delimiter_index = 0;
         while (end_delimiter[delimiter_index] &&
                ascii_upper(lexer->lookahead) == end_delimiter[delimiter_index]) {
@@ -358,7 +358,7 @@ static bool scan_less_than(Scanner *scanner, TSLexer *lexer, const bool *valid_s
     }
     bool is_bogus_comment = is_closing_tag || lexer->lookahead == '?';
     if (is_bogus_comment) {
-        while (lexer->lookahead && lexer->lookahead != '>') advance(lexer);
+        while (!lexer->eof(lexer) && lexer->lookahead != '>') advance(lexer);
         if (lexer->lookahead == '>') advance(lexer);
     }
     lexer->result_symbol = is_bogus_comment ? COMMENT : LITERAL_LESS_THAN;

@@ -17,6 +17,7 @@ for (const tag of ['script', 'style']) {
     try {
       for (const content of [
         'x',
+        'x\0y',
         `x</${tag}`,
         `x</${tag}\v><p>still raw</p>`,
         `x</ſ${tag.slice(1)}><p>still raw</p>`,
@@ -53,7 +54,7 @@ for (const tag of ['script', 'style']) {
     parser.setLanguage(language);
     const query = new Query(language, querySource);
     try {
-      for (const suffix of ['!x', '<', '\v', '\u00A0']) {
+      for (const suffix of ['!x', '<', '\v', '\u00A0', '\0x']) {
         const name = `${tag}${suffix}`;
         const tree = parser.parse(`<${name}>text</${name}>`)!;
         try {
@@ -79,6 +80,13 @@ for (const tag of ['script', 'style']) {
         } finally {
           tree.delete();
         }
+      }
+      const bogusComment = parser.parse(`</3\0<${tag}>x</${tag}><p>after</p>`)!;
+      try {
+        expect(bogusComment.rootNode.hasError).toBe(false);
+        expect(query.captures(bogusComment.rootNode)).toEqual([]);
+      } finally {
+        bogusComment.delete();
       }
       const control = parser.parse(`<div =<${tag}></div><${tag} data-x="<other>">real`)!;
       try {
