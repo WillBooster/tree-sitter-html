@@ -146,6 +146,8 @@ typedef struct {
 typedef struct {
     TagType type;
     String custom_tag_name;
+    uint32_t custom_tag_name_length;
+    uint64_t custom_tag_name_hash[2];
 } Tag;
 
 static const TagMapEntry TAG_TYPES_BY_TAG_NAME[126] = {
@@ -301,6 +303,9 @@ static inline Tag tag_new() {
     Tag tag;
     tag.type = END_;
     tag.custom_tag_name = (String) array_new();
+    tag.custom_tag_name_length = 0;
+    tag.custom_tag_name_hash[0] = 0;
+    tag.custom_tag_name_hash[1] = 0;
     return tag;
 }
 
@@ -309,6 +314,14 @@ static inline Tag tag_for_name(String name) {
     tag.type = tag_type_for_name(&name);
     if (tag.type == CUSTOM) {
         tag.custom_tag_name = name;
+        tag.custom_tag_name_length = name.size;
+        tag.custom_tag_name_hash[0] = UINT64_C(14695981039346656037);
+        tag.custom_tag_name_hash[1] = UINT64_C(7809847782465536322);
+        for (unsigned i = 0; i < name.size; i++) {
+            uint8_t byte = (uint8_t)name.contents[i];
+            tag.custom_tag_name_hash[0] = (tag.custom_tag_name_hash[0] ^ byte) * UINT64_C(1099511628211);
+            tag.custom_tag_name_hash[1] = (tag.custom_tag_name_hash[1] ^ byte) * UINT64_C(14029467366897019727);
+        }
     } else {
         array_delete(&name);
     }
@@ -328,13 +341,15 @@ static inline bool tag_is_void(const Tag *self) {
 static inline bool tag_eq(const Tag *self, const Tag *other) {
     if (self->type != other->type) return false;
     if (self->type == CUSTOM) {
-        if (self->custom_tag_name.size != other->custom_tag_name.size) {
+        if (self->custom_tag_name_length != other->custom_tag_name_length ||
+            self->custom_tag_name_hash[0] != other->custom_tag_name_hash[0] ||
+            self->custom_tag_name_hash[1] != other->custom_tag_name_hash[1]) {
             return false;
         }
         if (memcmp(
             self->custom_tag_name.contents,
             other->custom_tag_name.contents,
-            self->custom_tag_name.size
+            self->custom_tag_name.size < other->custom_tag_name.size ? self->custom_tag_name.size : other->custom_tag_name.size
         ) != 0) {
             return false;
         }

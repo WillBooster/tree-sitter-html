@@ -25,9 +25,13 @@ static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
 
 static inline void skip(TSLexer *lexer) { lexer->advance(lexer, true); }
 
+static inline int32_t ascii_upper(int32_t character) {
+    return character >= 'a' && character <= 'z' ? character - 'a' + 'A' : character;
+}
+
 static void append_tag_character(String *name, uint32_t character) {
     if (character < 0x80) {
-        array_push(name, character >= 'a' && character <= 'z' ? character - 'a' + 'A' : character);
+        array_push(name, ascii_upper(character));
         return;
     }
     unsigned continuation_count = character < 0x800 ? 1 : character < 0x10000 ? 2 : 3;
@@ -38,6 +42,9 @@ static void append_tag_character(String *name, uint32_t character) {
         array_push(name, 0x80 | ((character >> (6 * continuation_count)) & 0x3F));
     }
 }
+
+static unsigned serialize_custom_tag(Tag tag, char *buffer, unsigned capacity);
+static Tag deserialize_custom_tag(const char *buffer, unsigned *size);
 
 static unsigned serialize(Scanner *scanner, char *buffer) {
     uint16_t tag_count = scanner->tags.size > UINT16_MAX ? UINT16_MAX : scanner->tags.size;
@@ -50,17 +57,9 @@ static unsigned serialize(Scanner *scanner, char *buffer) {
     for (; serialized_tag_count < tag_count; serialized_tag_count++) {
         Tag tag = scanner->tags.contents[serialized_tag_count];
         if (tag.type == CUSTOM) {
-            unsigned name_length = tag.custom_tag_name.size;
-            if (name_length > UINT8_MAX) {
-                name_length = UINT8_MAX;
-            }
-            if (size + 2 + name_length >= TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
-                break;
-            }
-            buffer[size++] = (char)tag.type;
-            buffer[size++] = (char)name_length;
-            strncpy(&buffer[size], tag.custom_tag_name.contents, name_length);
-            size += name_length;
+            unsigned name_size = serialize_custom_tag(tag, &buffer[size], TREE_SITTER_SERIALIZATION_BUFFER_SIZE - size);
+            if (!name_size) break;
+            size += name_size;
         } else {
             if (size + 1 >= TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
                 break;
@@ -97,11 +96,7 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
                 Tag tag = tag_new();
                 tag.type = (TagType)buffer[size++];
                 if (tag.type == CUSTOM) {
-                    uint16_t name_length = (uint8_t)buffer[size++];
-                    array_reserve(&tag.custom_tag_name, name_length);
-                    tag.custom_tag_name.size = name_length;
-                    memcpy(tag.custom_tag_name.contents, &buffer[size], name_length);
-                    size += name_length;
+                    tag = deserialize_custom_tag(buffer, &size);
                 }
                 array_push(&scanner->tags, tag);
             }
@@ -112,6 +107,44 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
             }
         }
     }
+}
+
+static unsigned serialize_custom_tag(Tag tag, char *buffer, unsigned capacity) {
+    unsigned name_length = tag.custom_tag_name.size > UINT8_MAX ? UINT8_MAX : tag.custom_tag_name.size;
+    bool long_name = tag.custom_tag_name_length > UINT8_MAX;
+    unsigned identity_size = long_name ? 1 + sizeof(tag.custom_tag_name_length) + sizeof(tag.custom_tag_name_hash) : 0;
+    if (2 + identity_size + name_length >= capacity) return 0;
+    unsigned size = 0;
+    buffer[size++] = (char)tag.type;
+    buffer[size++] = long_name ? 0 : (char)name_length;
+    if (long_name) {
+        buffer[size++] = (char)name_length;
+        memcpy(&buffer[size], &tag.custom_tag_name_length, sizeof(tag.custom_tag_name_length));
+        size += sizeof(tag.custom_tag_name_length);
+        memcpy(&buffer[size], tag.custom_tag_name_hash, sizeof(tag.custom_tag_name_hash));
+        size += sizeof(tag.custom_tag_name_hash);
+    }
+    memcpy(&buffer[size], tag.custom_tag_name.contents, name_length);
+    return size + name_length;
+}
+
+static Tag deserialize_custom_tag(const char *buffer, unsigned *size) {
+    Tag tag = tag_new();
+    tag.type = CUSTOM;
+    unsigned name_length = (uint8_t)buffer[(*size)++];
+    bool long_name = name_length == 0;
+    if (long_name) {
+        name_length = (uint8_t)buffer[(*size)++];
+        memcpy(&tag.custom_tag_name_length, &buffer[*size], sizeof(tag.custom_tag_name_length));
+        *size += sizeof(tag.custom_tag_name_length);
+        memcpy(tag.custom_tag_name_hash, &buffer[*size], sizeof(tag.custom_tag_name_hash));
+        *size += sizeof(tag.custom_tag_name_hash);
+    }
+    array_reserve(&tag.custom_tag_name, name_length);
+    tag.custom_tag_name.size = name_length;
+    memcpy(tag.custom_tag_name.contents, &buffer[*size], name_length);
+    *size += name_length;
+    return long_name ? tag : tag_for_name(tag.custom_tag_name);
 }
 
 static String scan_tag_name(TSLexer *lexer) {
@@ -175,7 +208,7 @@ static bool scan_raw_text(Scanner *scanner, TSLexer *lexer) {
     while (lexer->lookahead) {
         unsigned delimiter_index = 0;
         while (end_delimiter[delimiter_index] &&
-               towupper(lexer->lookahead) == end_delimiter[delimiter_index]) {
+               ascii_upper(lexer->lookahead) == end_delimiter[delimiter_index]) {
             advance(lexer);
             delimiter_index++;
         }

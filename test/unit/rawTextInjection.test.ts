@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Edit, Language, Parser, Query } from '@willbooster/web-tree-sitter';
 
 const root = path.join(import.meta.dirname, '../..');
 await Parser.init();
@@ -15,7 +15,12 @@ for (const tag of ['script', 'style']) {
     parser.setLanguage(language);
     const query = new Query(language, querySource);
     try {
-      for (const content of ['x', `x</${tag}`, `x</${tag}\v><p>still raw</p>`]) {
+      for (const content of [
+        'x',
+        `x</${tag}`,
+        `x</${tag}\v><p>still raw</p>`,
+        `x</ſ${tag.slice(1)}><p>still raw</p>`,
+      ]) {
         const tree = parser.parse(`<${tag}>${content}`)!;
         try {
           expect(tree.rootNode.hasError).toBe(false);
@@ -134,7 +139,15 @@ test('preserves complete Unicode custom tag names without raw-text injections', 
   parser.setLanguage(language);
   const query = new Query(language, querySource);
   try {
-    for (const name of ['scrip\u2054', 'styl\u2065', 'xé', 'x中', 'x😀']) {
+    for (const name of [
+      'scrip\u2054',
+      'styl\u2065',
+      'xé',
+      'x中',
+      'x😀',
+      'x' + '中'.repeat(85),
+      'x' + '😀'.repeat(254),
+    ]) {
       const tree = parser.parse(`<${name}>text</${name}><p>after</p>`)!;
       try {
         expect(tree.rootNode.hasError).toBe(false);
@@ -155,6 +168,70 @@ test('preserves complete Unicode custom tag names without raw-text injections', 
     }
   } finally {
     query.delete();
+    parser.delete();
+  }
+});
+
+test('restores distinct long custom names and deeply nested short names', () => {
+  const parser = new Parser();
+  parser.setLanguage(language);
+  try {
+    const prefix = 'x' + '中'.repeat(100);
+    const source = `<${prefix}a>text</${prefix}a><p>after</p>`;
+    const tree = parser.parse(source)!;
+    try {
+      expect(tree.rootNode.hasError).toBe(false);
+      expect(tree.rootNode.firstNamedChild?.lastNamedChild?.firstNamedChild?.text).toBe(`${prefix}a`);
+      const offset = source.indexOf('text');
+      const updated = source.slice(0, offset) + 'more' + source.slice(offset + 4);
+      tree.edit(
+        new Edit({
+          startIndex: offset,
+          oldEndIndex: offset + 4,
+          newEndIndex: offset + 4,
+          startPosition: { row: 0, column: offset },
+          oldEndPosition: { row: 0, column: offset + 4 },
+          newEndPosition: { row: 0, column: offset + 4 },
+        })
+      );
+      const incremental = parser.parse(updated, tree)!;
+      const fresh = parser.parse(updated)!;
+      try {
+        expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
+        expect(incremental.rootNode.text).toBe(updated);
+      } finally {
+        incremental.delete();
+        fresh.delete();
+      }
+    } finally {
+      tree.delete();
+    }
+    const mismatched = parser.parse(`<${prefix}a>text</${prefix}b><p>after</p>`)!;
+    try {
+      expect(mismatched.rootNode.descendantsOfType('erroneous_end_tag_name').map((node) => node.text)).toContain(
+        `${prefix}b`
+      );
+      expect(mismatched.rootNode.descendantsOfType('end_tag').map((node) => node.text)).not.toContain(`</${prefix}b>`);
+    } finally {
+      mismatched.delete();
+    }
+    const names = Array.from({ length: 80 }, (_, index) => `x-${index}`);
+    const nested = parser.parse(
+      names.map((name) => `<${name}>`).join('') +
+        'text' +
+        names
+          .toReversed()
+          .map((name) => `</${name}>`)
+          .join('')
+    )!;
+    try {
+      expect(nested.rootNode.hasError).toBe(false);
+      expect(nested.rootNode.descendantsOfType('element')).toHaveLength(names.length);
+      expect(nested.rootNode.descendantsOfType('end_tag')).toHaveLength(names.length);
+    } finally {
+      nested.delete();
+    }
+  } finally {
     parser.delete();
   }
 });
