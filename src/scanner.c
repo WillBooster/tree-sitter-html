@@ -140,6 +140,10 @@ static bool scan_comment(TSLexer *lexer) {
     return false;
 }
 
+static inline int32_t ascii_upper(int32_t character) {
+    return character >= 'a' && character <= 'z' ? character - 'a' + 'A' : character;
+}
+
 static bool scan_raw_text(Scanner *scanner, TSLexer *lexer) {
     if (scanner->tags.size == 0) {
         return false;
@@ -149,19 +153,23 @@ static bool scan_raw_text(Scanner *scanner, TSLexer *lexer) {
 
     const char *end_delimiter = array_back(&scanner->tags)->type == SCRIPT ? "</SCRIPT" : "</STYLE";
 
-    unsigned delimiter_index = 0;
-    while (lexer->lookahead) {
-        if (towupper(lexer->lookahead) == end_delimiter[delimiter_index]) {
+    while (!lexer->eof(lexer)) {
+        unsigned delimiter_index = 0;
+        while (end_delimiter[delimiter_index] &&
+               ascii_upper(lexer->lookahead) == end_delimiter[delimiter_index]) {
+            advance(lexer);
             delimiter_index++;
-            if (delimiter_index == strlen(end_delimiter)) {
-                break;
-            }
-            advance(lexer);
-        } else {
-            delimiter_index = 0;
-            advance(lexer);
-            lexer->mark_end(lexer);
         }
+        if (!end_delimiter[delimiter_index] &&
+            (lexer->eof(lexer) || lexer->lookahead == '>' || lexer->lookahead == '/' || lexer->lookahead == ' ' ||
+             lexer->lookahead == '\t' || lexer->lookahead == '\n' || lexer->lookahead == '\r' ||
+             lexer->lookahead == '\f')) {
+            break;
+        }
+        if (delimiter_index == 0) {
+            advance(lexer);
+        }
+        lexer->mark_end(lexer);
     }
 
     lexer->result_symbol = RAW_TEXT;

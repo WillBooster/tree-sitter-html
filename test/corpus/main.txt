@@ -394,3 +394,42 @@ Greater-than signs in text
   (element (start_tag (tag_name)) (text) (end_tag (tag_name)))
   (element (start_tag (tag_name)) (text) (end_tag (tag_name)))
   (element (start_tag (tag_name)) (text) (entity) (text) (end_tag (tag_name))))
+
+==================================
+Raw text requires an end-tag name boundary
+==================================
+<script>const a = '</scriptX'; const b = '</script-'; const c = '</script`'; const d = '</script ';</script>
+<style>a::after {content: '</styleX </style- </style` </style '}</style>
+<p>after</p>
+
+---
+
+(document
+  (script_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name)))
+  (style_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name)))
+  (element (start_tag (tag_name)) (text) (end_tag (tag_name))))
+
+==================================
+Raw text overlapping and mixed-case closing tags
+==================================
+<script><</ScRiPt><style></sty</StYlE><p>after</p>
+
+---
+
+(document
+  (script_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name)))
+  (style_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name)))
+  (element (start_tag (tag_name)) (text) (end_tag (tag_name))))
+
+==================================
+Raw text closing tags followed by whitespace
+==================================
+<script>x</script ><style>x</style
+><p>after</p>
+
+---
+
+(document
+  (script_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name)))
+  (style_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name)))
+  (element (start_tag (tag_name)) (text) (end_tag (tag_name))))
