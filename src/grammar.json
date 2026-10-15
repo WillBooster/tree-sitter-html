@@ -55,15 +55,6 @@
           "name": "text"
         },
         {
-          "type": "ALIAS",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_literal_less_than"
-          },
-          "named": true,
-          "value": "text"
-        },
-        {
           "type": "SYMBOL",
           "name": "element"
         },
@@ -144,17 +135,8 @@
           ]
         },
         {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "SYMBOL",
-              "name": "end_tag"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "_implicit_end_tag"
-            }
-          ]
+          "type": "SYMBOL",
+          "name": "end_tag"
         }
       ]
     },
@@ -183,17 +165,8 @@
           ]
         },
         {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "SYMBOL",
-              "name": "end_tag"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "_implicit_end_tag"
-            }
-          ]
+          "type": "SYMBOL",
+          "name": "end_tag"
         }
       ]
     },
@@ -366,15 +339,8 @@
               "type": "SEQ",
               "members": [
                 {
-                  "type": "TOKEN",
-                  "content": {
-                    "type": "PREC",
-                    "value": 1,
-                    "content": {
-                      "type": "STRING",
-                      "value": "="
-                    }
-                  }
+                  "type": "STRING",
+                  "value": "="
                 },
                 {
                   "type": "CHOICE",
@@ -400,11 +366,11 @@
     },
     "attribute_name": {
       "type": "PATTERN",
-      "value": "[^/=\\t\\n\\f\\r >]+|=[^/=\\t\\n\\f\\r >]*"
+      "value": "[^<>\"'/=\\s]+"
     },
     "attribute_value": {
       "type": "PATTERN",
-      "value": "[^ \\t\\n\\f\\r>\"'][^ \\t\\n\\f\\r>]*"
+      "value": "[^<>\"'=\\s]+"
     },
     "entity": {
       "type": "PATTERN",
@@ -528,10 +494,6 @@
     {
       "type": "SYMBOL",
       "name": "comment"
-    },
-    {
-      "type": "SYMBOL",
-      "name": "_literal_less_than"
     }
   ],
   "inline": [],

@@ -433,57 +433,3 @@ Raw text closing tags followed by whitespace
   (script_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name)))
   (style_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name)))
   (element (start_tag (tag_name)) (text) (end_tag (tag_name))))
-
-==================================
-Unterminated script: newline-only content
-==================================
-<script>
-
----
-
-(document (script_element (start_tag (tag_name)) (raw_text)))
-
-==================================
-Unterminated script: prefix
-==================================
-<script>x</scriptX
-
----
-
-(document (script_element (start_tag (tag_name)) (raw_text)))
-
-==================================
-Unterminated script: vertical tab after the tag name
-==================================
-<script>x</script><p>still raw</p>
-
----
-
-(document (script_element (start_tag (tag_name)) (raw_text)))
-
-==================================
-Unterminated style: newline-only content
-==================================
-<style>
-
----
-
-(document (style_element (start_tag (tag_name)) (raw_text)))
-
-==================================
-Unterminated style: prefix
-==================================
-<style>x</styleX
-
----
-
-(document (style_element (start_tag (tag_name)) (raw_text)))
-
-==================================
-Unterminated style: vertical tab after the tag name
-==================================
-<style>x</style><p>still raw</p>
-
----
-
-(document (style_element (start_tag (tag_name)) (raw_text)))

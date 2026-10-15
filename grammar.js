@@ -26,7 +26,6 @@ module.exports = grammar({
     $._implicit_end_tag,
     $.raw_text,
     $.comment,
-    $._literal_less_than,
   ],
 
   rules: {
@@ -45,7 +44,6 @@ module.exports = grammar({
       $.doctype,
       $.entity,
       $.text,
-      alias($._literal_less_than, $.text),
       $.element,
       $.script_element,
       $.style_element,
@@ -64,13 +62,13 @@ module.exports = grammar({
     script_element: $ => seq(
       alias($.script_start_tag, $.start_tag),
       optional($.raw_text),
-      choice($.end_tag, $._implicit_end_tag),
+      $.end_tag,
     ),
 
     style_element: $ => seq(
       alias($.style_start_tag, $.start_tag),
       optional($.raw_text),
-      choice($.end_tag, $._implicit_end_tag),
+      $.end_tag,
     ),
 
     start_tag: $ => seq(
@@ -116,7 +114,7 @@ module.exports = grammar({
     attribute: $ => seq(
       $.attribute_name,
       optional(seq(
-        token(prec(1, '=')),
+        '=',
         choice(
           $.attribute_value,
           $.quoted_attribute_value,
@@ -124,9 +122,9 @@ module.exports = grammar({
       )),
     ),
 
-    attribute_name: _ => /[^/=\t\n\f\r >]+|=[^/=\t\n\f\r >]*/,
+    attribute_name: _ => /[^<>"'/=\s]+/,
 
-    attribute_value: _ => /[^ \t\n\f\r>"'][^ \t\n\f\r>]*/,
+    attribute_value: _ => /[^<>"'=\s]+/,
 
     // HTML fixes the named-reference set: https://html.spec.whatwg.org/multipage/named-characters.html
     entity: _ => /&(#([xX][0-9a-fA-F]{1,6}|[0-9]{1,5})|[A-Za-z]{1,30});?/,

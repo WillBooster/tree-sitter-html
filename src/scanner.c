@@ -13,7 +13,6 @@ enum TokenType {
     IMPLICIT_END_TAG,
     RAW_TEXT,
     COMMENT,
-    LITERAL_LESS_THAN,
 };
 
 typedef struct {
@@ -26,31 +25,6 @@ static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
 
 static inline void skip(TSLexer *lexer) { lexer->advance(lexer, true); }
 
-static inline bool is_ascii_letter(int32_t character) {
-    return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z');
-}
-
-static inline int32_t ascii_upper(int32_t character) {
-    return character >= 'a' && character <= 'z' ? character - 'a' + 'A' : character;
-}
-
-static void append_tag_character(String *name, uint32_t character) {
-    if (character < 0x80) {
-        array_push(name, ascii_upper(character));
-        return;
-    }
-    unsigned continuation_count = character < 0x800 ? 1 : character < 0x10000 ? 2 : 3;
-    const uint8_t prefixes[] = {0, 0xC0, 0xE0, 0xF0};
-    array_push(name, prefixes[continuation_count] | (character >> (6 * continuation_count)));
-    while (continuation_count > 0) {
-        continuation_count--;
-        array_push(name, 0x80 | ((character >> (6 * continuation_count)) & 0x3F));
-    }
-}
-
-static unsigned serialize_custom_tag(Tag tag, char *buffer, unsigned capacity);
-static Tag deserialize_custom_tag(const char *buffer, unsigned *size);
-
 static unsigned serialize(Scanner *scanner, char *buffer) {
     uint16_t tag_count = scanner->tags.size > UINT16_MAX ? UINT16_MAX : scanner->tags.size;
     uint16_t serialized_tag_count = 0;
@@ -62,9 +36,17 @@ static unsigned serialize(Scanner *scanner, char *buffer) {
     for (; serialized_tag_count < tag_count; serialized_tag_count++) {
         Tag tag = scanner->tags.contents[serialized_tag_count];
         if (tag.type == CUSTOM) {
-            unsigned name_size = serialize_custom_tag(tag, &buffer[size], TREE_SITTER_SERIALIZATION_BUFFER_SIZE - size);
-            if (!name_size) break;
-            size += name_size;
+            unsigned name_length = tag.custom_tag_name.size;
+            if (name_length > UINT8_MAX) {
+                name_length = UINT8_MAX;
+            }
+            if (size + 2 + name_length >= TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
+                break;
+            }
+            buffer[size++] = (char)tag.type;
+            buffer[size++] = (char)name_length;
+            strncpy(&buffer[size], tag.custom_tag_name.contents, name_length);
+            size += name_length;
         } else {
             if (size + 1 >= TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
                 break;
@@ -101,7 +83,11 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
                 Tag tag = tag_new();
                 tag.type = (TagType)buffer[size++];
                 if (tag.type == CUSTOM) {
-                    tag = deserialize_custom_tag(buffer, &size);
+                    uint16_t name_length = (uint8_t)buffer[size++];
+                    array_reserve(&tag.custom_tag_name, name_length);
+                    tag.custom_tag_name.size = name_length;
+                    memcpy(tag.custom_tag_name.contents, &buffer[size], name_length);
+                    size += name_length;
                 }
                 array_push(&scanner->tags, tag);
             }
@@ -114,57 +100,11 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
     }
 }
 
-static unsigned serialize_custom_tag(Tag tag, char *buffer, unsigned capacity) {
-    unsigned name_length = tag.custom_tag_name.size > UINT8_MAX ? UINT8_MAX : tag.custom_tag_name.size;
-    bool long_name = tag.custom_tag_name_length > UINT8_MAX;
-    unsigned identity_size = long_name ? 1 + sizeof(tag.custom_tag_name_length) + sizeof(tag.custom_tag_name_hash) : 0;
-    if (2 + identity_size + name_length >= capacity) return 0;
-    unsigned size = 0;
-    buffer[size++] = (char)tag.type;
-    buffer[size++] = long_name ? 0 : (char)name_length;
-    if (long_name) {
-        buffer[size++] = (char)name_length;
-        memcpy(&buffer[size], &tag.custom_tag_name_length, sizeof(tag.custom_tag_name_length));
-        size += sizeof(tag.custom_tag_name_length);
-        memcpy(&buffer[size], tag.custom_tag_name_hash, sizeof(tag.custom_tag_name_hash));
-        size += sizeof(tag.custom_tag_name_hash);
-    }
-    memcpy(&buffer[size], tag.custom_tag_name.contents, name_length);
-    return size + name_length;
-}
-
-static Tag deserialize_custom_tag(const char *buffer, unsigned *size) {
-    Tag tag = tag_new();
-    tag.type = CUSTOM;
-    unsigned name_length = (uint8_t)buffer[(*size)++];
-    bool long_name = name_length == 0;
-    if (long_name) {
-        name_length = (uint8_t)buffer[(*size)++];
-        memcpy(&tag.custom_tag_name_length, &buffer[*size], sizeof(tag.custom_tag_name_length));
-        *size += sizeof(tag.custom_tag_name_length);
-        memcpy(tag.custom_tag_name_hash, &buffer[*size], sizeof(tag.custom_tag_name_hash));
-        *size += sizeof(tag.custom_tag_name_hash);
-    }
-    array_reserve(&tag.custom_tag_name, name_length);
-    tag.custom_tag_name.size = name_length;
-    memcpy(tag.custom_tag_name.contents, &buffer[*size], name_length);
-    *size += name_length;
-    return long_name ? tag : tag_for_name(tag.custom_tag_name);
-}
-
 static String scan_tag_name(TSLexer *lexer) {
     String tag_name = array_new();
-    if (!is_ascii_letter(lexer->lookahead)) {
-        return tag_name;
-    }
-    while (!lexer->eof(lexer)) {
-        switch (lexer->lookahead) {
-            case '\t': case '\n': case '\f': case '\r': case ' ': case '/': case '>':
-                return tag_name;
-            default:
-                append_tag_character(&tag_name, lexer->lookahead);
-                advance(lexer);
-        }
+    while (iswalnum(lexer->lookahead) || lexer->lookahead == '-' || lexer->lookahead == ':') {
+        array_push(&tag_name, towupper(lexer->lookahead));
+        advance(lexer);
     }
     return tag_name;
 }
@@ -180,7 +120,7 @@ static bool scan_comment(TSLexer *lexer) {
     advance(lexer);
 
     unsigned dashes = 0;
-    while (!lexer->eof(lexer)) {
+    while (lexer->lookahead) {
         switch (lexer->lookahead) {
             case '-':
                 ++dashes;
@@ -200,6 +140,10 @@ static bool scan_comment(TSLexer *lexer) {
     return false;
 }
 
+static inline int32_t ascii_upper(int32_t character) {
+    return character >= 'a' && character <= 'z' ? character - 'a' + 'A' : character;
+}
+
 static bool scan_raw_text(Scanner *scanner, TSLexer *lexer) {
     if (scanner->tags.size == 0) {
         return false;
@@ -217,7 +161,7 @@ static bool scan_raw_text(Scanner *scanner, TSLexer *lexer) {
             delimiter_index++;
         }
         if (!end_delimiter[delimiter_index] &&
-            (lexer->lookahead == '>' || lexer->lookahead == '/' || lexer->lookahead == ' ' ||
+            (lexer->eof(lexer) || lexer->lookahead == '>' || lexer->lookahead == '/' || lexer->lookahead == ' ' ||
              lexer->lookahead == '\t' || lexer->lookahead == '\n' || lexer->lookahead == '\r' ||
              lexer->lookahead == '\f')) {
             break;
@@ -237,16 +181,20 @@ static void pop_tag(Scanner *scanner) {
     tag_free(&popped_tag);
 }
 
-static bool scan_void_end_tag(Scanner *scanner, TSLexer *lexer) {
-    if (scanner->tags.size == 0 || !tag_is_void(array_back(&scanner->tags))) return false;
-    pop_tag(scanner);
-    lexer->result_symbol = IMPLICIT_END_TAG;
-    return true;
-}
-
-static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer, bool is_closing_tag) {
-    if (!is_closing_tag && scan_void_end_tag(scanner, lexer)) return true;
+static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     Tag *parent = scanner->tags.size == 0 ? NULL : array_back(&scanner->tags);
+
+    bool is_closing_tag = false;
+    if (lexer->lookahead == '/') {
+        is_closing_tag = true;
+        advance(lexer);
+    } else {
+        if (parent && tag_is_void(parent)) {
+            pop_tag(scanner);
+            lexer->result_symbol = IMPLICIT_END_TAG;
+            return true;
+        }
+    }
 
     String tag_name = scan_tag_name(lexer);
     if (tag_name.size == 0 && !lexer->eof(lexer)) {
@@ -257,6 +205,7 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer, bool is_clos
     Tag next_tag = tag_for_name(tag_name);
 
     if (is_closing_tag) {
+        // The tag correctly closes the topmost element on the stack
         if (scanner->tags.size > 0 && tag_eq(array_back(&scanner->tags), &next_tag)) {
             tag_free(&next_tag);
             return false;
@@ -276,8 +225,7 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer, bool is_clos
         parent &&
         (
             !tag_can_contain(parent, &next_tag) ||
-            ((parent->type == HTML || parent->type == HEAD || parent->type == BODY ||
-              parent->type == SCRIPT || parent->type == STYLE) && lexer->eof(lexer))
+            ((parent->type == HTML || parent->type == HEAD || parent->type == BODY) && lexer->eof(lexer))
         )
     ) {
         pop_tag(scanner);
@@ -346,32 +294,8 @@ static bool scan_self_closing_tag_delimiter(Scanner *scanner, TSLexer *lexer) {
     return false;
 }
 
-static bool scan_less_than(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
-    lexer->mark_end(lexer);
-    advance(lexer);
-    if (lexer->lookahead == '!') {
-        advance(lexer);
-        return scan_comment(lexer);
-    }
-    bool is_closing_tag = lexer->lookahead == '/';
-    if (is_closing_tag) advance(lexer);
-    if (!is_closing_tag && valid_symbols[IMPLICIT_END_TAG] && scan_void_end_tag(scanner, lexer)) return true;
-    if (!valid_symbols[LITERAL_LESS_THAN] || is_ascii_letter(lexer->lookahead)) {
-        return valid_symbols[IMPLICIT_END_TAG] && scan_implicit_end_tag(scanner, lexer, is_closing_tag);
-    }
-    bool is_bogus_comment = is_closing_tag || lexer->lookahead == '?';
-    if (is_bogus_comment) {
-        while (!lexer->eof(lexer) && lexer->lookahead != '>') advance(lexer);
-        if (lexer->lookahead == '>') advance(lexer);
-    }
-    lexer->result_symbol = is_bogus_comment ? COMMENT : LITERAL_LESS_THAN;
-    lexer->mark_end(lexer);
-    return true;
-}
-
 static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
-    if (valid_symbols[RAW_TEXT] && !valid_symbols[START_TAG_NAME] && !valid_symbols[END_TAG_NAME] &&
-        !lexer->eof(lexer)) {
+    if (valid_symbols[RAW_TEXT] && !valid_symbols[START_TAG_NAME] && !valid_symbols[END_TAG_NAME]) {
         return scan_raw_text(scanner, lexer);
     }
 
@@ -381,11 +305,22 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
 
     switch (lexer->lookahead) {
         case '<':
-            return scan_less_than(scanner, lexer, valid_symbols);
+            lexer->mark_end(lexer);
+            advance(lexer);
+
+            if (lexer->lookahead == '!') {
+                advance(lexer);
+                return scan_comment(lexer);
+            }
+
+            if (valid_symbols[IMPLICIT_END_TAG]) {
+                return scan_implicit_end_tag(scanner, lexer);
+            }
+            break;
 
         case '\0':
             if (valid_symbols[IMPLICIT_END_TAG]) {
-                return scan_implicit_end_tag(scanner, lexer, false);
+                return scan_implicit_end_tag(scanner, lexer);
             }
             break;
 
@@ -396,8 +331,7 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
             break;
 
         default:
-            if ((valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME] ||
-                 valid_symbols[ERRONEOUS_END_TAG_NAME]) && !valid_symbols[RAW_TEXT]) {
+            if ((valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME]) && !valid_symbols[RAW_TEXT]) {
                 return valid_symbols[START_TAG_NAME] ? scan_start_tag_name(scanner, lexer)
                                                      : scan_end_tag_name(scanner, lexer);
             }
