@@ -237,14 +237,16 @@ static void pop_tag(Scanner *scanner) {
     tag_free(&popped_tag);
 }
 
-static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer, bool is_closing_tag) {
-    Tag *parent = scanner->tags.size == 0 ? NULL : array_back(&scanner->tags);
+static bool scan_void_end_tag(Scanner *scanner, TSLexer *lexer) {
+    if (scanner->tags.size == 0 || !tag_is_void(array_back(&scanner->tags))) return false;
+    pop_tag(scanner);
+    lexer->result_symbol = IMPLICIT_END_TAG;
+    return true;
+}
 
-    if (!is_closing_tag && parent && tag_is_void(parent)) {
-        pop_tag(scanner);
-        lexer->result_symbol = IMPLICIT_END_TAG;
-        return true;
-    }
+static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer, bool is_closing_tag) {
+    if (!is_closing_tag && scan_void_end_tag(scanner, lexer)) return true;
+    Tag *parent = scanner->tags.size == 0 ? NULL : array_back(&scanner->tags);
 
     String tag_name = scan_tag_name(lexer);
     if (tag_name.size == 0 && !lexer->eof(lexer)) {
@@ -353,6 +355,7 @@ static bool scan_less_than(Scanner *scanner, TSLexer *lexer, const bool *valid_s
     }
     bool is_closing_tag = lexer->lookahead == '/';
     if (is_closing_tag) advance(lexer);
+    if (!is_closing_tag && valid_symbols[IMPLICIT_END_TAG] && scan_void_end_tag(scanner, lexer)) return true;
     if (!valid_symbols[LITERAL_LESS_THAN] || is_ascii_letter(lexer->lookahead)) {
         return valid_symbols[IMPLICIT_END_TAG] && scan_implicit_end_tag(scanner, lexer, is_closing_tag);
     }

@@ -286,3 +286,26 @@ test('retains enclosing elements around non-letter tag openings', () => {
     parser.delete();
   }
 });
+
+test('ends void elements before recovered less-than nodes', () => {
+  const parser = new Parser();
+  parser.setLanguage(language);
+  try {
+    for (const name of ['br', 'img', 'input']) {
+      for (const suffix of ['<<p>x</p>', '<3><p>x</p>', '<?xml?><p>x</p>']) {
+        const tree = parser.parse(`<${name}>${suffix}`)!;
+        try {
+          expect(tree.rootNode.hasError).toBe(false);
+          expect(tree.rootNode.descendantsOfType('element').map((node) => node.text)).toEqual([
+            `<${name}>`,
+            '<p>x</p>',
+          ]);
+        } finally {
+          tree.delete();
+        }
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});
