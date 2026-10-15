@@ -55,6 +55,15 @@
           "name": "text"
         },
         {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_literal_less_than"
+          },
+          "named": true,
+          "value": "text"
+        },
+        {
           "type": "SYMBOL",
           "name": "element"
         },
@@ -519,6 +528,10 @@
     {
       "type": "SYMBOL",
       "name": "comment"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_literal_less_than"
     }
   ],
   "inline": [],

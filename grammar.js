@@ -26,6 +26,7 @@ module.exports = grammar({
     $._implicit_end_tag,
     $.raw_text,
     $.comment,
+    $._literal_less_than,
   ],
 
   rules: {
@@ -44,6 +45,7 @@ module.exports = grammar({
       $.doctype,
       $.entity,
       $.text,
+      alias($._literal_less_than, $.text),
       $.element,
       $.script_element,
       $.style_element,

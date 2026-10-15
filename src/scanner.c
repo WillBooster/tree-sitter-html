@@ -13,6 +13,7 @@ enum TokenType {
     IMPLICIT_END_TAG,
     RAW_TEXT,
     COMMENT,
+    LITERAL_LESS_THAN,
 };
 
 typedef struct {
@@ -24,6 +25,10 @@ typedef struct {
 static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
 
 static inline void skip(TSLexer *lexer) { lexer->advance(lexer, true); }
+
+static inline bool is_ascii_letter(int32_t character) {
+    return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z');
+}
 
 static inline int32_t ascii_upper(int32_t character) {
     return character >= 'a' && character <= 'z' ? character - 'a' + 'A' : character;
@@ -149,8 +154,7 @@ static Tag deserialize_custom_tag(const char *buffer, unsigned *size) {
 
 static String scan_tag_name(TSLexer *lexer) {
     String tag_name = array_new();
-    if (!((lexer->lookahead >= 'a' && lexer->lookahead <= 'z') ||
-          (lexer->lookahead >= 'A' && lexer->lookahead <= 'Z'))) {
+    if (!is_ascii_letter(lexer->lookahead)) {
         return tag_name;
     }
     while (lexer->lookahead) {
@@ -233,14 +237,10 @@ static void pop_tag(Scanner *scanner) {
     tag_free(&popped_tag);
 }
 
-static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
+static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer, bool is_closing_tag) {
     Tag *parent = scanner->tags.size == 0 ? NULL : array_back(&scanner->tags);
 
-    bool is_closing_tag = false;
-    if (lexer->lookahead == '/') {
-        is_closing_tag = true;
-        advance(lexer);
-    } else if (parent && tag_is_void(parent)) {
+    if (!is_closing_tag && parent && tag_is_void(parent)) {
         pop_tag(scanner);
         lexer->result_symbol = IMPLICIT_END_TAG;
         return true;
@@ -344,6 +344,28 @@ static bool scan_self_closing_tag_delimiter(Scanner *scanner, TSLexer *lexer) {
     return false;
 }
 
+static bool scan_less_than(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
+    lexer->mark_end(lexer);
+    advance(lexer);
+    if (lexer->lookahead == '!') {
+        advance(lexer);
+        return scan_comment(lexer);
+    }
+    bool is_closing_tag = lexer->lookahead == '/';
+    if (is_closing_tag) advance(lexer);
+    if (!valid_symbols[LITERAL_LESS_THAN] || is_ascii_letter(lexer->lookahead) ||
+        (!is_closing_tag && lexer->lookahead == '?')) {
+        return valid_symbols[IMPLICIT_END_TAG] && scan_implicit_end_tag(scanner, lexer, is_closing_tag);
+    }
+    if (is_closing_tag) {
+        while (lexer->lookahead && lexer->lookahead != '>') advance(lexer);
+        if (lexer->lookahead == '>') advance(lexer);
+    }
+    lexer->result_symbol = is_closing_tag ? COMMENT : LITERAL_LESS_THAN;
+    lexer->mark_end(lexer);
+    return true;
+}
+
 static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     if (valid_symbols[RAW_TEXT] && !valid_symbols[START_TAG_NAME] && !valid_symbols[END_TAG_NAME] &&
         !lexer->eof(lexer)) {
@@ -356,22 +378,11 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
 
     switch (lexer->lookahead) {
         case '<':
-            lexer->mark_end(lexer);
-            advance(lexer);
-
-            if (lexer->lookahead == '!') {
-                advance(lexer);
-                return scan_comment(lexer);
-            }
-
-            if (valid_symbols[IMPLICIT_END_TAG]) {
-                return scan_implicit_end_tag(scanner, lexer);
-            }
-            break;
+            return scan_less_than(scanner, lexer, valid_symbols);
 
         case '\0':
             if (valid_symbols[IMPLICIT_END_TAG]) {
-                return scan_implicit_end_tag(scanner, lexer);
+                return scan_implicit_end_tag(scanner, lexer, false);
             }
             break;
 

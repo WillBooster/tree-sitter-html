@@ -235,3 +235,34 @@ test('restores distinct long custom names and deeply nested short names', () => 
     parser.delete();
   }
 });
+
+test('retains enclosing elements around non-letter tag openings', () => {
+  const parser = new Parser();
+  parser.setLanguage(language);
+  try {
+    for (const source of ['<div><3>x</3></div>', '<div></3></div>', '<div></-></div>', '<div></_></div>']) {
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.descendantsOfType('start_tag').map((node) => node.firstNamedChild?.text)).toContain('div');
+        expect(tree.rootNode.hasError).toBe(false);
+        expect(tree.rootNode.firstNamedChild?.type).toBe('element');
+        expect(tree.rootNode.descendantsOfType('tag_name').map((node) => node.text)).not.toContain('3');
+        expect(tree.rootNode.descendantsOfType('comment').map((node) => node.text)).toContain(
+          source.match(/<\/[^>]+>/)![0]
+        );
+      } finally {
+        tree.delete();
+      }
+    }
+    const attribute = parser.parse('<div a=</3>>text</div>')!;
+    try {
+      expect(attribute.rootNode.hasError).toBe(false);
+      expect(attribute.rootNode.descendantsOfType('attribute_value').map((node) => node.text)).toEqual(['</3']);
+      expect(attribute.rootNode.descendantsOfType('comment')).toHaveLength(0);
+    } finally {
+      attribute.delete();
+    }
+  } finally {
+    parser.delete();
+  }
+});
