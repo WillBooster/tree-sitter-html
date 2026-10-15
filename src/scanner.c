@@ -353,15 +353,15 @@ static bool scan_less_than(Scanner *scanner, TSLexer *lexer, const bool *valid_s
     }
     bool is_closing_tag = lexer->lookahead == '/';
     if (is_closing_tag) advance(lexer);
-    if (!valid_symbols[LITERAL_LESS_THAN] || is_ascii_letter(lexer->lookahead) ||
-        (!is_closing_tag && lexer->lookahead == '?')) {
+    if (!valid_symbols[LITERAL_LESS_THAN] || is_ascii_letter(lexer->lookahead)) {
         return valid_symbols[IMPLICIT_END_TAG] && scan_implicit_end_tag(scanner, lexer, is_closing_tag);
     }
-    if (is_closing_tag) {
+    bool is_bogus_comment = is_closing_tag || lexer->lookahead == '?';
+    if (is_bogus_comment) {
         while (lexer->lookahead && lexer->lookahead != '>') advance(lexer);
         if (lexer->lookahead == '>') advance(lexer);
     }
-    lexer->result_symbol = is_closing_tag ? COMMENT : LITERAL_LESS_THAN;
+    lexer->result_symbol = is_bogus_comment ? COMMENT : LITERAL_LESS_THAN;
     lexer->mark_end(lexer);
     return true;
 }

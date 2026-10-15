@@ -254,6 +254,18 @@ test('retains enclosing elements around non-letter tag openings', () => {
         tree.delete();
       }
     }
+    for (const source of ['<?xml?><div>text</div>', '<div><?php echo ?></div>']) {
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError).toBe(false);
+        expect(tree.rootNode.descendantsOfType('comment').map((node) => node.text)).toEqual([
+          source.match(/<\?[^>]+>/)![0],
+        ]);
+        expect(tree.rootNode.descendantsOfType('element')).toHaveLength(1);
+      } finally {
+        tree.delete();
+      }
+    }
     const attribute = parser.parse('<div a=</3>>text</div>')!;
     try {
       expect(attribute.rootNode.hasError).toBe(false);
