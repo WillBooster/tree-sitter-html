@@ -25,6 +25,20 @@ static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
 
 static inline void skip(TSLexer *lexer) { lexer->advance(lexer, true); }
 
+static void append_tag_character(String *name, uint32_t character) {
+    if (character < 0x80) {
+        array_push(name, character >= 'a' && character <= 'z' ? character - 'a' + 'A' : character);
+        return;
+    }
+    unsigned continuation_count = character < 0x800 ? 1 : character < 0x10000 ? 2 : 3;
+    const uint8_t prefixes[] = {0, 0xC0, 0xE0, 0xF0};
+    array_push(name, prefixes[continuation_count] | (character >> (6 * continuation_count)));
+    while (continuation_count > 0) {
+        continuation_count--;
+        array_push(name, 0x80 | ((character >> (6 * continuation_count)) & 0x3F));
+    }
+}
+
 static unsigned serialize(Scanner *scanner, char *buffer) {
     uint16_t tag_count = scanner->tags.size > UINT16_MAX ? UINT16_MAX : scanner->tags.size;
     uint16_t serialized_tag_count = 0;
@@ -111,7 +125,7 @@ static String scan_tag_name(TSLexer *lexer) {
             case '\t': case '\n': case '\f': case '\r': case ' ': case '/': case '>':
                 return tag_name;
             default:
-                array_push(&tag_name, towupper(lexer->lookahead));
+                append_tag_character(&tag_name, lexer->lookahead);
                 advance(lexer);
         }
     }

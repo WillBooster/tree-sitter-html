@@ -128,3 +128,33 @@ test('preserves enclosing elements around non-letter less-than text', () => {
     parser.delete();
   }
 });
+
+test('preserves complete Unicode custom tag names without raw-text injections', () => {
+  const parser = new Parser();
+  parser.setLanguage(language);
+  const query = new Query(language, querySource);
+  try {
+    for (const name of ['scrip\u2054', 'styl\u2065', 'xé', 'x中', 'x😀']) {
+      const tree = parser.parse(`<${name}>text</${name}><p>after</p>`)!;
+      try {
+        expect(tree.rootNode.hasError).toBe(false);
+        expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual(['element', 'element']);
+        expect(tree.rootNode.firstNamedChild?.lastNamedChild?.firstNamedChild?.text).toBe(name);
+        expect(query.captures(tree.rootNode)).toEqual([]);
+      } finally {
+        tree.delete();
+      }
+    }
+    const mismatched = parser.parse('<xé>text</x\u01E9><p>after</p>')!;
+    try {
+      expect(mismatched.rootNode.descendantsOfType('erroneous_end_tag_name').map((node) => node.text)).toContain(
+        'x\u01E9'
+      );
+    } finally {
+      mismatched.delete();
+    }
+  } finally {
+    query.delete();
+    parser.delete();
+  }
+});
