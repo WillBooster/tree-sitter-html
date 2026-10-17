@@ -34,7 +34,7 @@ static unsigned serialize(Scanner *scanner, char *buffer) {
     size += sizeof(tag_count);
 
     for (; serialized_tag_count < tag_count; serialized_tag_count++) {
-        Tag tag = scanner->tags.contents[serialized_tag_count];
+        Tag tag = scanner->tags.contents[scanner->tags.size - serialized_tag_count - 1];
         if (tag.type == CUSTOM) {
             unsigned name_length = tag.custom_tag_name.size;
             if (name_length > UINT8_MAX) {
@@ -78,8 +78,10 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
 
         array_reserve(&scanner->tags, tag_count);
         if (tag_count > 0) {
-            unsigned iter = 0;
-            for (iter = 0; iter < serialized_tag_count; iter++) {
+            for (unsigned i = 0; i < tag_count; i++) {
+                array_push(&scanner->tags, tag_new());
+            }
+            for (unsigned i = 0; i < serialized_tag_count; i++) {
                 Tag tag = tag_new();
                 tag.type = (TagType)buffer[size++];
                 if (tag.type == CUSTOM) {
@@ -89,11 +91,7 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
                     memcpy(tag.custom_tag_name.contents, &buffer[size], name_length);
                     size += name_length;
                 }
-                array_push(&scanner->tags, tag);
-            }
-            // Preserve nesting depth when serialization drops the innermost tags, whose identities are lost.
-            for (; iter < tag_count; iter++) {
-                array_push(&scanner->tags, tag_new());
+                scanner->tags.contents[tag_count - i - 1] = tag;
             }
         }
     }
