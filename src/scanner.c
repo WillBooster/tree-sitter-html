@@ -91,6 +91,7 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
                 }
                 array_push(&scanner->tags, tag);
             }
+            // Preserve nesting depth when the serialization buffer cannot hold every tag's details.
             for (; iter < tag_count; iter++) {
                 array_push(&scanner->tags, tag_new());
             }

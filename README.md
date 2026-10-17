@@ -19,8 +19,9 @@ it. Input that contains NUL characters can parse to a different tree than with u
 lexers that generator emits treat a NUL character as an ordinary character. This grammar also accepts literal `>`
 characters in text nodes, which upstream 0.23.2 rejects. Its scanner requires an HTML tag-name boundary after
 `</script` and `</style`, so longer names and overlapping prefixes remain raw text. Closing-name comparisons
-fold only ASCII letters, and embedded NUL characters remain part of raw-text content. Incomplete elements
-retain their existing recovery behavior.
+fold only ASCII letters, and embedded NUL characters remain part of raw-text content. Void elements close
+before following text, entities, and complete comments, which become siblings instead of children.
+Malformed input after a void element can replace its enclosing element with an `ERROR` node during recovery.
 
 ## Usage
 
