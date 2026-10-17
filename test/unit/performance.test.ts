@@ -35,26 +35,38 @@ test('uses a Wasm build built from the current parser', () => {
 // it for implicit end tags, so lines that each leave an element open (e.g. `<b></i>`) take time that grows faster than
 // the input, with upstream's parser as well.
 test('recovers from an error on each line in linear time', { timeout: 60_000 }, () => {
-  const small = '<p a=\n'.repeat(2000);
-  const large = '<p a=\n'.repeat(20_000);
-  parseCpuTime(large);
-  parseCpuTime(large);
+  expectLinearParseTime('<p a=\n'.repeat(2000), '<p a=\n'.repeat(20_000), true);
+});
+
+// The scanner stores, serializes, and restores its open-tag stack before most tokens, so its cost per token must not
+// grow with the nesting depth of repeated tags.
+test('parses deeply nested repeated tags in linear time', { timeout: 60_000 }, () => {
+  expectLinearParseTime(nestRepeatedTags(1000), nestRepeatedTags(10_000), false);
+});
+
+function nestRepeatedTags(depth: number): string {
+  return `${'<xyz>'.repeat(depth)}x${'</xyz>'.repeat(depth)}`;
+}
+
+function expectLinearParseTime(small: string, large: string, hasError: boolean): void {
+  parseCpuTime(large, hasError);
+  parseCpuTime(large, hasError);
   let smallFastest = Infinity;
   let largeFastest = Infinity;
   for (let run = 0; run < 5; run++) {
-    smallFastest = Math.min(smallFastest, parseCpuTime(small));
-    largeFastest = Math.min(largeFastest, parseCpuTime(large));
+    smallFastest = Math.min(smallFastest, parseCpuTime(small, hasError));
+    largeFastest = Math.min(largeFastest, parseCpuTime(large, hasError));
   }
   expect(largeFastest / smallFastest).toBeLessThan(18);
-});
+}
 
-function parseCpuTime(source: string): number {
+function parseCpuTime(source: string, expectedError: boolean): number {
   const start = process.threadCpuUsage();
   const tree = parser.parse(source);
   const { system, user } = process.threadCpuUsage(start);
   if (!tree) throw new Error('The parser returned no tree');
   const { hasError } = tree.rootNode;
   tree.delete();
-  expect(hasError).toBe(true);
+  expect(hasError).toBe(expectedError);
   return system + user;
 }
