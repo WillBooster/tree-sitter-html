@@ -83,20 +83,20 @@ static unsigned write_tag(const Tag *tag, char *buffer, unsigned size) {
 // Writes as many of `count` copies of `tag` as fit and returns how many were written.
 static uint16_t write_tag_run(const Tag *tag, uint16_t count, char *buffer, unsigned *size) {
     unsigned tag_size = serialized_tag_size(tag);
-    if (*size + tag_size >= TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
+    if (*size + tag_size > TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
         return 0;
     }
     *size = write_tag(tag, buffer, *size);
     // A marker that would take more space than the repeated tags would reduce how many distinct tags fit.
     if (count > 1 && TAG_RUN_SIZE <= tag_size * (count - 1) &&
-        *size + TAG_RUN_SIZE < TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
+        *size + TAG_RUN_SIZE <= TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
         buffer[(*size)++] = (char)TAG_RUN_MARKER;
         memcpy(&buffer[*size], &count, sizeof(count));
         *size += sizeof(count);
         return count;
     }
     uint16_t written = 1;
-    for (; written < count && *size + tag_size < TREE_SITTER_SERIALIZATION_BUFFER_SIZE; written++) {
+    for (; written < count && *size + tag_size <= TREE_SITTER_SERIALIZATION_BUFFER_SIZE; written++) {
         *size = write_tag(tag, buffer, *size);
     }
     return written;
