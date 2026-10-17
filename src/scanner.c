@@ -20,38 +20,94 @@ typedef struct {
 } Scanner;
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
 
 static inline void skip(TSLexer *lexer) { lexer->advance(lexer, true); }
 
+// Follows a serialized tag to repeat it the number of times in the next two bytes; no tag type uses this byte.
+#define TAG_RUN_MARKER UINT8_MAX
+#define TAG_RUN_SIZE (1 + sizeof(uint16_t))
+
+static inline unsigned serialized_tag_size(const Tag *tag) {
+    return tag->type == CUSTOM ? 2 + MIN(tag->custom_tag_name.size, UINT8_MAX) : 1;
+}
+
+static unsigned write_tag(const Tag *tag, char *buffer, unsigned size) {
+    buffer[size++] = (char)tag->type;
+    if (tag->type == CUSTOM) {
+        unsigned name_length = MIN(tag->custom_tag_name.size, UINT8_MAX);
+        buffer[size++] = (char)name_length;
+        memcpy(&buffer[size], tag->custom_tag_name.contents, name_length);
+        size += name_length;
+    }
+    return size;
+}
+
+// Counts the identical tags from `tag` toward the bottom of the stack, which holds at least `limit` tags from it.
+static uint16_t count_tag_run(const Tag *tag, uint16_t limit) {
+    uint16_t run = 1;
+    while (run < limit && tag_eq(tag, tag - run)) {
+        run++;
+    }
+    return run;
+}
+
+static Tag read_tag(const char *buffer, unsigned *size) {
+    Tag tag = tag_new();
+    tag.type = (TagType)buffer[(*size)++];
+    if (tag.type == CUSTOM) {
+        uint8_t name_length = (uint8_t)buffer[(*size)++];
+        array_extend(&tag.custom_tag_name, name_length, &buffer[*size]);
+        *size += name_length;
+    }
+    return tag;
+}
+
+static Tag tag_copy(const Tag *tag) {
+    Tag copy = tag_new();
+    copy.type = tag->type;
+    array_push_all(&copy.custom_tag_name, &tag->custom_tag_name);
+    return copy;
+}
+
+// Serializes the innermost tags first, which void-element closing and raw-text scanning depend on, as runs of
+// identical tags so that repeated nesting keeps its outer tags too. Tags that do not fit deserialize as unknown.
 static unsigned serialize(Scanner *scanner, char *buffer) {
+    const Tag *tags = scanner->tags.contents;
     uint16_t tag_count = scanner->tags.size > UINT16_MAX ? UINT16_MAX : scanner->tags.size;
     uint16_t serialized_tag_count = 0;
 
-    unsigned size = sizeof(tag_count);
+    unsigned size = sizeof(serialized_tag_count);
     memcpy(&buffer[size], &tag_count, sizeof(tag_count));
     size += sizeof(tag_count);
 
-    for (; serialized_tag_count < tag_count; serialized_tag_count++) {
-        Tag tag = scanner->tags.contents[scanner->tags.size - serialized_tag_count - 1];
-        if (tag.type == CUSTOM) {
-            unsigned name_length = tag.custom_tag_name.size;
-            if (name_length > UINT8_MAX) {
-                name_length = UINT8_MAX;
-            }
-            if (size + 2 + name_length >= TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
-                break;
-            }
-            buffer[size++] = (char)tag.type;
-            buffer[size++] = (char)name_length;
-            strncpy(&buffer[size], tag.custom_tag_name.contents, name_length);
-            size += name_length;
+    while (serialized_tag_count < tag_count) {
+        const Tag *tag = &tags[scanner->tags.size - serialized_tag_count - 1];
+        uint16_t run = count_tag_run(tag, tag_count - serialized_tag_count);
+
+        unsigned tag_size = serialized_tag_size(tag);
+        if (size + tag_size >= TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
+            break;
+        }
+        size = write_tag(tag, buffer, size);
+        uint16_t written = 1;
+        // A marker that would take more space than the repeated tags would reduce how many distinct tags fit.
+        if (run > 1 && TAG_RUN_SIZE <= tag_size * (run - 1) &&
+            size + TAG_RUN_SIZE < TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
+            buffer[size++] = (char)TAG_RUN_MARKER;
+            memcpy(&buffer[size], &run, sizeof(run));
+            size += sizeof(run);
+            written = run;
         } else {
-            if (size + 1 >= TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
-                break;
+            for (; written < run && size + tag_size < TREE_SITTER_SERIALIZATION_BUFFER_SIZE; written++) {
+                size = write_tag(tag, buffer, size);
             }
-            buffer[size++] = (char)tag.type;
+        }
+        serialized_tag_count += written;
+        if (written < run) {
+            break;
         }
     }
 
@@ -65,35 +121,36 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
     }
     array_clear(&scanner->tags);
 
-    if (length > 0) {
-        unsigned size = 0;
-        uint16_t tag_count = 0;
-        uint16_t serialized_tag_count = 0;
+    if (length == 0) {
+        return;
+    }
 
-        memcpy(&serialized_tag_count, &buffer[size], sizeof(serialized_tag_count));
-        size += sizeof(serialized_tag_count);
+    unsigned size = 0;
+    uint16_t serialized_tag_count = 0;
+    uint16_t tag_count = 0;
+    memcpy(&serialized_tag_count, &buffer[size], sizeof(serialized_tag_count));
+    size += sizeof(serialized_tag_count);
+    memcpy(&tag_count, &buffer[size], sizeof(tag_count));
+    size += sizeof(tag_count);
 
-        memcpy(&tag_count, &buffer[size], sizeof(tag_count));
-        size += sizeof(tag_count);
+    array_reserve(&scanner->tags, tag_count);
+    for (unsigned i = 0; i < tag_count; i++) {
+        array_push(&scanner->tags, tag_new());
+    }
 
-        array_reserve(&scanner->tags, tag_count);
-        if (tag_count > 0) {
-            for (unsigned i = 0; i < tag_count; i++) {
-                array_push(&scanner->tags, tag_new());
-            }
-            for (unsigned i = 0; i < serialized_tag_count; i++) {
-                Tag tag = tag_new();
-                tag.type = (TagType)buffer[size++];
-                if (tag.type == CUSTOM) {
-                    uint16_t name_length = (uint8_t)buffer[size++];
-                    array_reserve(&tag.custom_tag_name, name_length);
-                    tag.custom_tag_name.size = name_length;
-                    memcpy(tag.custom_tag_name.contents, &buffer[size], name_length);
-                    size += name_length;
-                }
-                scanner->tags.contents[tag_count - i - 1] = tag;
-            }
+    // Serialized tags start from the innermost one, so they fill the stack from its top.
+    unsigned restored_tag_count = 0;
+    while (restored_tag_count < serialized_tag_count) {
+        Tag tag = read_tag(buffer, &size);
+        uint16_t run = 1;
+        if (size < length && (uint8_t)buffer[size] == TAG_RUN_MARKER) {
+            memcpy(&run, &buffer[size + 1], sizeof(run));
+            size += TAG_RUN_SIZE;
         }
+        for (uint16_t i = 1; i < run; i++) {
+            scanner->tags.contents[tag_count - ++restored_tag_count] = tag_copy(&tag);
+        }
+        scanner->tags.contents[tag_count - ++restored_tag_count] = tag;
     }
 }
 

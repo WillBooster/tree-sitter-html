@@ -23,9 +23,10 @@ characters in text nodes, which upstream 0.23.2 rejects. Its scanner requires an
 `</script` and `</style`, so longer names and overlapping prefixes remain raw text. Closing-name comparisons
 fold only ASCII letters, and embedded NUL characters remain part of raw-text content. Void elements close
 before following text, entities, and complete comments, which become siblings instead of children.
-Scanner serialization prioritizes the innermost open tags so active void, script, and style elements retain their
-identities when deeply nested. Its fixed-size buffer can still lose older outer tag identities, which can produce
-recovery errors when those outer tags close. Custom tag names longer than 255 bytes are truncated in serialized state.
+Scanner serialization stores the open-tag stack from its innermost tag, compressing runs of identical tags, so active
+void, script, and style elements retain their identities when deeply nested. When deep nesting of distinct tags
+exceeds its fixed-size buffer, the outermost tag identities are lost, which can produce recovery errors when those
+tags close. Custom tag names longer than 255 bytes are truncated in serialized state.
 Malformed input after a void element can replace its enclosing element with an `ERROR` node during recovery.
 
 ## Usage

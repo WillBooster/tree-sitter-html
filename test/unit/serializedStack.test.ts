@@ -9,13 +9,28 @@ const root = path.resolve(import.meta.dirname, '../..');
 await Parser.init();
 const language = await Language.load(path.join(root, 'tree-sitter-html.wasm'));
 
-for (const depth of [100, 201, 202, 210]) {
-  const prefix = `${'<xyz>'.repeat(depth)}<section><custom-a>`;
-  const source = `${prefix}<br>text<script>content</script></custom-a></section><br>tail${'</xyz>'.repeat(depth)}`;
+// Each wrapper nests the payload deeper than the scanner serialization buffer holds as one byte per tag.
+// Repeated tags fit as runs, so the whole document must parse without errors; distinct tags overflow, so only
+// the payload's active tags are guaranteed.
+const wrappers = [
+  { name: 'repeated custom tags', open: '<xyz>'.repeat(1100), close: '</xyz>'.repeat(1100), compressible: true },
+  {
+    name: 'runs of known and custom tags',
+    open: `<main>${'<div>'.repeat(300)}${'<xyz>'.repeat(300)}${'<span>'.repeat(300)}<p><p-x>`,
+    close: `</p-x></p>${'</span>'.repeat(300)}${'</xyz>'.repeat(300)}${'</div>'.repeat(300)}</main>`,
+    compressible: true,
+  },
+  { name: 'alternating known tags', open: '<b><i>'.repeat(600), close: '</i></b>'.repeat(600), compressible: false },
+];
+
+for (const { name, open, close, compressible } of wrappers) {
+  const prefix = `${open}<section><custom-a>`;
+  const source = `${prefix}<br>text<script>content</script></custom-a></section><br>tail${close}`;
   const offset = prefix.length + '<br>'.length;
   const edited = `${source.slice(0, offset)}edited${source.slice(offset + 4)}`;
+  const wrapped = `<xyz>${edited}</xyz>`;
 
-  test(`preserves active tags at depth ${depth} in native fresh and incremental parses`, () => {
+  test(`preserves active tags within ${name} in native fresh and incremental parses`, () => {
     const directory = fs.mkdtempSync(path.join(root, '.tmp/serialized-stack-'));
     try {
       const file = path.join(directory, 'input.html');
@@ -30,10 +45,10 @@ for (const depth of [100, 201, 202, 210]) {
           timeout: 30_000,
           env: { ...process.env, TREE_SITTER_LIBDIR: path.join(root, '.tmp/tree-sitter-lib') },
           encoding: 'utf8',
-          maxBuffer: 4 * 1024 * 1024,
+          maxBuffer: 16 * 1024 * 1024,
         });
         expect(result.error).toBeUndefined();
-        expect([0, 1]).toContain(result.status);
+        expect(result.status).toBe(compressible ? 0 : 1);
         const compact = result.stdout.replaceAll(/<(\w+)\b[^>]*>/g, '<$1>').replaceAll(/\s+/g, '');
         expect(compact).toContain(
           `<element><start_tag>&lt;<tag_name>br</tag_name>&gt;</start_tag></element><text>${text}</text>`
@@ -47,44 +62,38 @@ for (const depth of [100, 201, 202, 210]) {
     } finally {
       fs.rmSync(directory, { recursive: true, force: true });
     }
-  }, 90_000);
+  }, 120_000);
 
-  test(`preserves active tags at depth ${depth} in Wasm fresh and incremental parses`, () => {
+  test(`preserves active tags within ${name} in Wasm fresh and incremental parses`, () => {
     const parser = new Parser();
     parser.setLanguage(language);
-    const tree = parser.parse(source)!;
+    const trees: Tree[] = [];
+    const parse = (text: string, old?: Tree): Tree => {
+      const tree = parser.parse(text, old)!;
+      trees.push(tree);
+      return tree;
+    };
     try {
-      checkActiveTags(tree, 'text');
+      const tree = parse(source);
+      checkActiveTags(tree, 'text', compressible);
       editLine(tree, offset, 4, 'edited');
-      const incremental = parser.parse(edited, tree)!;
-      const fresh = parser.parse(edited)!;
-      try {
-        checkActiveTags(incremental, 'edited');
-        expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
-        editLine(incremental, 0, 0, '<xyz>');
-        editLine(incremental, edited.length + 5, 0, '</xyz>');
-        const wrapped = `<xyz>${edited}</xyz>`;
-        const wrappedIncremental = parser.parse(wrapped, incremental)!;
-        const wrappedFresh = parser.parse(wrapped)!;
-        try {
-          checkActiveTags(wrappedIncremental, 'edited');
-          expect(wrappedIncremental.rootNode.toString()).toBe(wrappedFresh.rootNode.toString());
-        } finally {
-          wrappedIncremental.delete();
-          wrappedFresh.delete();
-        }
-      } finally {
-        incremental.delete();
-        fresh.delete();
-      }
+      const incremental = parse(edited, tree);
+      checkActiveTags(incremental, 'edited', compressible);
+      expect(incremental.rootNode.toString()).toBe(parse(edited).rootNode.toString());
+      editLine(incremental, 0, 0, '<xyz>');
+      editLine(incremental, edited.length + 5, 0, '</xyz>');
+      const wrappedIncremental = parse(wrapped, incremental);
+      checkActiveTags(wrappedIncremental, 'edited', compressible);
+      expect(wrappedIncremental.rootNode.toString()).toBe(parse(wrapped).rootNode.toString());
     } finally {
-      tree.delete();
+      for (const tree of trees) tree.delete();
       parser.delete();
     }
   }, 30_000);
 }
 
-function checkActiveTags(tree: Tree, text: string): void {
+function checkActiveTags(tree: Tree, text: string, compressible: boolean): void {
+  expect(tree.rootNode.hasError).toBe(!compressible);
   const names = tree.rootNode.descendantsOfType('tag_name');
   const breaks = names.filter((node) => node.text === 'br').map((node) => node.parent?.parent);
   expect(breaks.map((node) => node?.text)).toEqual(['<br>', '<br>']);
