@@ -256,7 +256,7 @@ static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
     return true;
 }
 
-static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer) {
+static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer, bool valid_end_tag) {
     String tag_name = scan_tag_name(lexer);
 
     if (tag_name.size == 0) {
@@ -265,7 +265,7 @@ static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer) {
     }
 
     Tag tag = tag_for_name(tag_name);
-    if (scanner->tags.size > 0 && tag_eq(array_back(&scanner->tags), &tag)) {
+    if (valid_end_tag && scanner->tags.size > 0 && tag_eq(array_back(&scanner->tags), &tag)) {
         pop_tag(scanner);
         lexer->result_symbol = END_TAG_NAME;
     } else {
@@ -341,9 +341,10 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
             break;
 
         default:
-            if ((valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME]) && !valid_symbols[RAW_TEXT]) {
+            if ((valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME] ||
+                 valid_symbols[ERRONEOUS_END_TAG_NAME]) && !valid_symbols[RAW_TEXT]) {
                 return valid_symbols[START_TAG_NAME] ? scan_start_tag_name(scanner, lexer)
-                                                     : scan_end_tag_name(scanner, lexer);
+                                                     : scan_end_tag_name(scanner, lexer, valid_symbols[END_TAG_NAME]);
             }
     }
 
