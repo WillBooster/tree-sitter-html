@@ -91,8 +91,7 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
                 }
                 array_push(&scanner->tags, tag);
             }
-            // add zero tags if we didn't read enough, this is because the
-            // buffer had no more room but we held more tags.
+            // Preserve nesting depth when serialization drops the innermost tags, whose identities are lost.
             for (; iter < tag_count; iter++) {
                 array_push(&scanner->tags, tag_new());
             }
@@ -109,7 +108,7 @@ static String scan_tag_name(TSLexer *lexer) {
     return tag_name;
 }
 
-static bool scan_comment(TSLexer *lexer) {
+static bool scan_comment(TSLexer *lexer, bool mark_end) {
     if (lexer->lookahead != '-') {
         return false;
     }
@@ -129,7 +128,9 @@ static bool scan_comment(TSLexer *lexer) {
                 if (dashes >= 2) {
                     lexer->result_symbol = COMMENT;
                     advance(lexer);
-                    lexer->mark_end(lexer);
+                    if (mark_end) {
+                        lexer->mark_end(lexer);
+                    }
                     return true;
                 }
             default:
@@ -205,14 +206,11 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     Tag next_tag = tag_for_name(tag_name);
 
     if (is_closing_tag) {
-        // The tag correctly closes the topmost element on the stack
         if (scanner->tags.size > 0 && tag_eq(array_back(&scanner->tags), &next_tag)) {
             tag_free(&next_tag);
             return false;
         }
 
-        // Otherwise, dig deeper and queue implicit end tags (to be nice in
-        // the case of malformed HTML)
         for (unsigned i = scanner->tags.size; i > 0; i--) {
             if (scanner->tags.contents[i - 1].type == next_tag.type) {
                 pop_tag(scanner);
@@ -261,7 +259,7 @@ static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
     return true;
 }
 
-static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer) {
+static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer, bool valid_end_tag) {
     String tag_name = scan_tag_name(lexer);
 
     if (tag_name.size == 0) {
@@ -269,8 +267,19 @@ static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer) {
         return false;
     }
 
+    if (!valid_end_tag) {
+        lexer->mark_end(lexer);
+        while (iswspace(lexer->lookahead)) {
+            advance(lexer);
+        }
+        if (lexer->lookahead != '>') {
+            array_delete(&tag_name);
+            return false;
+        }
+    }
+
     Tag tag = tag_for_name(tag_name);
-    if (scanner->tags.size > 0 && tag_eq(array_back(&scanner->tags), &tag)) {
+    if (valid_end_tag && scanner->tags.size > 0 && tag_eq(array_back(&scanner->tags), &tag)) {
         pop_tag(scanner);
         lexer->result_symbol = END_TAG_NAME;
     } else {
@@ -294,6 +303,18 @@ static bool scan_self_closing_tag_delimiter(Scanner *scanner, TSLexer *lexer) {
     return false;
 }
 
+static bool scan_comment_or_void_end(Scanner *scanner, TSLexer *lexer, bool close_void) {
+    advance(lexer);
+    if (!scan_comment(lexer, !close_void)) {
+        return false;
+    }
+    if (close_void) {
+        pop_tag(scanner);
+        lexer->result_symbol = IMPLICIT_END_TAG;
+    }
+    return true;
+}
+
 static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     if (valid_symbols[RAW_TEXT] && !valid_symbols[START_TAG_NAME] && !valid_symbols[END_TAG_NAME]) {
         return scan_raw_text(scanner, lexer);
@@ -303,14 +324,28 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         skip(lexer);
     }
 
+    bool close_void = valid_symbols[IMPLICIT_END_TAG] && !valid_symbols[SELF_CLOSING_TAG_DELIMITER] &&
+                      scanner->tags.size > 0 && tag_is_void(array_back(&scanner->tags));
+    if (close_void && lexer->lookahead != '<') {
+        lexer->mark_end(lexer);
+        pop_tag(scanner);
+        lexer->result_symbol = IMPLICIT_END_TAG;
+        return true;
+    }
+
     switch (lexer->lookahead) {
         case '<':
             lexer->mark_end(lexer);
             advance(lexer);
 
             if (lexer->lookahead == '!') {
-                advance(lexer);
-                return scan_comment(lexer);
+                return scan_comment_or_void_end(scanner, lexer, close_void);
+            }
+
+            if (close_void && lexer->lookahead != '/') {
+                pop_tag(scanner);
+                lexer->result_symbol = IMPLICIT_END_TAG;
+                return true;
             }
 
             if (valid_symbols[IMPLICIT_END_TAG]) {
@@ -331,9 +366,10 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
             break;
 
         default:
-            if ((valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME]) && !valid_symbols[RAW_TEXT]) {
+            if ((valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME] ||
+                 valid_symbols[ERRONEOUS_END_TAG_NAME]) && !valid_symbols[RAW_TEXT]) {
                 return valid_symbols[START_TAG_NAME] ? scan_start_tag_name(scanner, lexer)
-                                                     : scan_end_tag_name(scanner, lexer);
+                                                     : scan_end_tag_name(scanner, lexer, valid_symbols[END_TAG_NAME]);
             }
     }
 
