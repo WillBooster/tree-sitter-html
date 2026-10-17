@@ -264,6 +264,17 @@ static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer, bool valid_end_t
         return false;
     }
 
+    if (!valid_end_tag) {
+        lexer->mark_end(lexer);
+        while (iswspace(lexer->lookahead)) {
+            advance(lexer);
+        }
+        if (lexer->lookahead != '>') {
+            array_delete(&tag_name);
+            return false;
+        }
+    }
+
     Tag tag = tag_for_name(tag_name);
     if (valid_end_tag && scanner->tags.size > 0 && tag_eq(array_back(&scanner->tags), &tag)) {
         pop_tag(scanner);
