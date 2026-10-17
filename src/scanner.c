@@ -107,7 +107,7 @@ static String scan_tag_name(TSLexer *lexer) {
     return tag_name;
 }
 
-static bool scan_comment(TSLexer *lexer) {
+static bool scan_comment(TSLexer *lexer, bool mark_end) {
     if (lexer->lookahead != '-') {
         return false;
     }
@@ -127,7 +127,9 @@ static bool scan_comment(TSLexer *lexer) {
                 if (dashes >= 2) {
                     lexer->result_symbol = COMMENT;
                     advance(lexer);
-                    lexer->mark_end(lexer);
+                    if (mark_end) {
+                        lexer->mark_end(lexer);
+                    }
                     return true;
                 }
             default:
@@ -323,15 +325,22 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
             lexer->mark_end(lexer);
             advance(lexer);
 
+            if (lexer->lookahead == '!') {
+                advance(lexer);
+                if (!scan_comment(lexer, !close_void)) {
+                    return false;
+                }
+                if (close_void) {
+                    pop_tag(scanner);
+                    lexer->result_symbol = IMPLICIT_END_TAG;
+                }
+                return true;
+            }
+
             if (close_void && lexer->lookahead != '/') {
                 pop_tag(scanner);
                 lexer->result_symbol = IMPLICIT_END_TAG;
                 return true;
-            }
-
-            if (lexer->lookahead == '!') {
-                advance(lexer);
-                return scan_comment(lexer);
             }
 
             if (valid_symbols[IMPLICIT_END_TAG]) {
