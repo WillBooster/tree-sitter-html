@@ -91,8 +91,6 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
                 }
                 array_push(&scanner->tags, tag);
             }
-            // add zero tags if we didn't read enough, this is because the
-            // buffer had no more room but we held more tags.
             for (; iter < tag_count; iter++) {
                 array_push(&scanner->tags, tag_new());
             }
@@ -205,14 +203,11 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     Tag next_tag = tag_for_name(tag_name);
 
     if (is_closing_tag) {
-        // The tag correctly closes the topmost element on the stack
         if (scanner->tags.size > 0 && tag_eq(array_back(&scanner->tags), &next_tag)) {
             tag_free(&next_tag);
             return false;
         }
 
-        // Otherwise, dig deeper and queue implicit end tags (to be nice in
-        // the case of malformed HTML)
         for (unsigned i = scanner->tags.size; i > 0; i--) {
             if (scanner->tags.contents[i - 1].type == next_tag.type) {
                 pop_tag(scanner);
@@ -303,10 +298,25 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         skip(lexer);
     }
 
+    bool close_void = valid_symbols[IMPLICIT_END_TAG] && !valid_symbols[SELF_CLOSING_TAG_DELIMITER] &&
+                      scanner->tags.size > 0 && tag_is_void(array_back(&scanner->tags));
+    if (close_void && lexer->lookahead != '<') {
+        lexer->mark_end(lexer);
+        pop_tag(scanner);
+        lexer->result_symbol = IMPLICIT_END_TAG;
+        return true;
+    }
+
     switch (lexer->lookahead) {
         case '<':
             lexer->mark_end(lexer);
             advance(lexer);
+
+            if (close_void && lexer->lookahead != '/') {
+                pop_tag(scanner);
+                lexer->result_symbol = IMPLICIT_END_TAG;
+                return true;
+            }
 
             if (lexer->lookahead == '!') {
                 advance(lexer);

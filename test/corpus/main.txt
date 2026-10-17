@@ -433,3 +433,39 @@ Raw text closing tags followed by whitespace
   (script_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name)))
   (style_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name)))
   (element (start_tag (tag_name)) (text) (end_tag (tag_name))))
+
+==================================
+Void elements leave following content as siblings
+==================================
+<div><input><!-- comment --><br>text<img>&amp;<hr>/slash</div>
+
+---
+
+(document
+  (element
+    (start_tag (tag_name))
+    (element (start_tag (tag_name)))
+    (comment)
+    (element (start_tag (tag_name)))
+    (text)
+    (element (start_tag (tag_name)))
+    (entity)
+    (element (start_tag (tag_name)))
+    (text)
+    (end_tag (tag_name))))
+
+==================================
+Void elements and explicit endings
+==================================
+<div><input></input><!-- sibling --><br/></div><hr>
+
+---
+
+(document
+  (element
+    (start_tag (tag_name))
+    (element (start_tag (tag_name)) (end_tag (tag_name)))
+    (comment)
+    (element (self_closing_tag (tag_name)))
+    (end_tag (tag_name)))
+  (element (start_tag (tag_name))))
