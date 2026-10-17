@@ -141,11 +141,11 @@ static Tag read_tag(const char *buffer, unsigned *size) {
     return tag;
 }
 
-static void reverse_tag_runs(TagRun *begin, TagRun *end) {
-    while (begin + 1 < end) {
-        TagRun run = *begin;
-        *begin++ = *--end;
-        *end = run;
+static void reverse_tag_runs(Scanner *scanner, unsigned begin) {
+    for (unsigned end = scanner->tags.size; begin + 1 < end; begin++, end--) {
+        TagRun run = scanner->tags.contents[begin];
+        scanner->tags.contents[begin] = scanner->tags.contents[end - 1];
+        scanner->tags.contents[end - 1] = run;
     }
 }
 
@@ -184,7 +184,7 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
             array_push(&scanner->tags, ((TagRun){tag, count}));
         }
     }
-    reverse_tag_runs(scanner->tags.contents + first_restored_run, scanner->tags.contents + scanner->tags.size);
+    reverse_tag_runs(scanner, first_restored_run);
 }
 
 static String scan_tag_name(TSLexer *lexer) {
