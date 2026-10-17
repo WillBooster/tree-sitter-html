@@ -302,6 +302,18 @@ static bool scan_self_closing_tag_delimiter(Scanner *scanner, TSLexer *lexer) {
     return false;
 }
 
+static bool scan_comment_or_void_end(Scanner *scanner, TSLexer *lexer, bool close_void) {
+    advance(lexer);
+    if (!scan_comment(lexer, !close_void)) {
+        return false;
+    }
+    if (close_void) {
+        pop_tag(scanner);
+        lexer->result_symbol = IMPLICIT_END_TAG;
+    }
+    return true;
+}
+
 static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     if (valid_symbols[RAW_TEXT] && !valid_symbols[START_TAG_NAME] && !valid_symbols[END_TAG_NAME]) {
         return scan_raw_text(scanner, lexer);
@@ -326,15 +338,7 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
             advance(lexer);
 
             if (lexer->lookahead == '!') {
-                advance(lexer);
-                if (!scan_comment(lexer, !close_void)) {
-                    return false;
-                }
-                if (close_void) {
-                    pop_tag(scanner);
-                    lexer->result_symbol = IMPLICIT_END_TAG;
-                }
-                return true;
+                return scan_comment_or_void_end(scanner, lexer, close_void);
             }
 
             if (close_void && lexer->lookahead != '/') {
