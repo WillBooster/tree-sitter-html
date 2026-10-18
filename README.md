@@ -22,7 +22,11 @@ lexers that generator emits treat a NUL character as an ordinary character. This
 characters and bare `&` in text nodes, which upstream 0.23.2 rejects. A bare `&` becomes its own `text` node beside
 surrounding text, while character references remain `entity` nodes. Its scanner requires an HTML tag-name boundary after
 `</script` and `</style`, so longer names and overlapping prefixes remain raw text. Closing-name comparisons
-fold only ASCII letters, and embedded NUL characters remain part of raw-text content. Void elements close
+fold only ASCII letters, and embedded NUL characters remain part of raw-text content. Script content follows
+HTML escaped and double-escaped states, so closing-tag text inside a double escape remains raw text. A script that reaches
+EOF while scanning raw content closes implicitly without an error: its `script_element` has no `end_tag` child, and its
+remaining content stays available for JavaScript injection. Incomplete closing tags such as `</script` still report
+recovery errors. Unterminated style elements still report an error. Void elements close
 before following text, entities, and complete comments, which become siblings instead of children.
 Scanner serialization stores the open-tag stack from its innermost tag, compressing runs of identical tags, so active
 void, script, and style elements retain their identities when deeply nested. When deep nesting of distinct tags

@@ -543,3 +543,35 @@ Complete comments after void elements preserve following slash text
     (comment)
     (text)
     (end_tag (tag_name))))
+
+===================================
+Double-escaped script content
+===================================
+<script><!-- <script></script><em>inside</em></script><p>after</p>
+---
+
+(document
+  (script_element
+    (start_tag (tag_name))
+    (raw_text)
+    (end_tag (tag_name)))
+  (element
+    (start_tag (tag_name))
+    (text)
+    (end_tag (tag_name))))
+
+===================================
+Double-escaped script returns to script data after comment terminator
+===================================
+<script><!-- <script> --></script><p>after</p>
+---
+
+(document
+  (script_element
+    (start_tag (tag_name))
+    (raw_text)
+    (end_tag (tag_name)))
+  (element
+    (start_tag (tag_name))
+    (text)
+    (end_tag (tag_name))))

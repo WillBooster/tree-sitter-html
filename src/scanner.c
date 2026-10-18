@@ -229,36 +229,90 @@ static inline int32_t ascii_upper(int32_t character) {
     return character >= 'a' && character <= 'z' ? character - 'a' + 'A' : character;
 }
 
+typedef enum { RAW_TEXT_NORMAL, RAW_TEXT_ESCAPED, RAW_TEXT_DOUBLE_ESCAPED } RawTextMode;
+
+static bool scan_raw_less_than(TSLexer *lexer, bool script, RawTextMode *mode);
+static bool scan_raw_name(TSLexer *lexer, const char *name);
+static bool is_raw_name_boundary(TSLexer *lexer);
+
 static bool scan_raw_text(Scanner *scanner, TSLexer *lexer) {
     if (scanner->tags.size == 0) {
         return false;
     }
 
     lexer->mark_end(lexer);
-
-    const char *end_delimiter = top_tag(scanner)->type == SCRIPT ? "</SCRIPT" : "</STYLE";
+    bool script = top_tag(scanner)->type == SCRIPT;
+    RawTextMode mode = RAW_TEXT_NORMAL;
+    unsigned dashes = 0;
 
     while (!lexer->eof(lexer)) {
-        unsigned delimiter_index = 0;
-        while (end_delimiter[delimiter_index] &&
-               ascii_upper(lexer->lookahead) == end_delimiter[delimiter_index]) {
-            advance(lexer);
-            delimiter_index++;
+        if (lexer->lookahead == '<') {
+            dashes = 0;
+            RawTextMode previous_mode = mode;
+            if (scan_raw_less_than(lexer, script, &mode)) {
+                break;
+            }
+            if (previous_mode == RAW_TEXT_NORMAL && mode == RAW_TEXT_ESCAPED) {
+                dashes = 2;
+            }
+            lexer->mark_end(lexer);
+            continue;
         }
-        if (!end_delimiter[delimiter_index] &&
-            (lexer->eof(lexer) || lexer->lookahead == '>' || lexer->lookahead == '/' || lexer->lookahead == ' ' ||
-             lexer->lookahead == '\t' || lexer->lookahead == '\n' || lexer->lookahead == '\r' ||
-             lexer->lookahead == '\f')) {
-            break;
+        if (mode != RAW_TEXT_NORMAL && lexer->lookahead == '-') {
+            dashes += dashes < 2;
+        } else {
+            if (lexer->lookahead == '>' && dashes == 2) {
+                mode = RAW_TEXT_NORMAL;
+            }
+            dashes = 0;
         }
-        if (delimiter_index == 0) {
-            advance(lexer);
-        }
+        advance(lexer);
         lexer->mark_end(lexer);
     }
 
     lexer->result_symbol = RAW_TEXT;
     return true;
+}
+
+static bool scan_raw_less_than(TSLexer *lexer, bool script, RawTextMode *mode) {
+    advance(lexer);
+    if (lexer->lookahead == '/') {
+        advance(lexer);
+        if (!scan_raw_name(lexer, script ? "SCRIPT" : "STYLE") ||
+            !(is_raw_name_boundary(lexer) || lexer->eof(lexer))) {
+            return false;
+        }
+        if (*mode != RAW_TEXT_DOUBLE_ESCAPED) {
+            return true;
+        }
+        *mode = RAW_TEXT_ESCAPED;
+        return false;
+    }
+    if (script && *mode == RAW_TEXT_NORMAL && lexer->lookahead == '!') {
+        advance(lexer);
+        if (scan_raw_name(lexer, "--")) {
+            *mode = RAW_TEXT_ESCAPED;
+        }
+    } else if (*mode == RAW_TEXT_ESCAPED && scan_raw_name(lexer, "SCRIPT") && is_raw_name_boundary(lexer)) {
+        *mode = RAW_TEXT_DOUBLE_ESCAPED;
+    }
+    return false;
+}
+
+static bool scan_raw_name(TSLexer *lexer, const char *name) {
+    for (unsigned i = 0; name[i]; i++) {
+        if (ascii_upper(lexer->lookahead) != name[i]) {
+            return false;
+        }
+        advance(lexer);
+    }
+    return true;
+}
+
+static bool is_raw_name_boundary(TSLexer *lexer) {
+    return lexer->lookahead == '>' || lexer->lookahead == '/' || lexer->lookahead == ' ' ||
+           lexer->lookahead == '\t' || lexer->lookahead == '\n' || lexer->lookahead == '\r' ||
+           lexer->lookahead == '\f';
 }
 
 static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
@@ -395,6 +449,13 @@ static bool scan_comment_or_void_end(Scanner *scanner, TSLexer *lexer, bool clos
 }
 
 static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
+    if (valid_symbols[IMPLICIT_END_TAG] && lexer->eof(lexer) &&
+        top_tag(scanner) && top_tag(scanner)->type == SCRIPT) {
+        pop_tag(scanner);
+        lexer->result_symbol = IMPLICIT_END_TAG;
+        return true;
+    }
+
     if (valid_symbols[RAW_TEXT] && !valid_symbols[START_TAG_NAME] && !valid_symbols[END_TAG_NAME]) {
         return scan_raw_text(scanner, lexer);
     }
