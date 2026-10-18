@@ -24,6 +24,24 @@ for (const tag of ['script', 'style']) {
         'x\0y',
         '<',
         `</${tag.slice(0, 3)}`,
+        ...(tag === 'script'
+          ? [
+              '<!-- <script></script><em>inside</em>',
+              '<!-- <ScRiPt></sCrIpT>',
+              '<!-- <script/ignored></script >',
+              '<!-- <script\t>\0</script\n>',
+              '<!-- <script> -->',
+              '<!-- <script> --->',
+              '<!-- <script> <!-- -->',
+              '<!-- <scriptX>',
+              '<!-- <script\v>',
+              '<!-- <script> </scriptX></script>',
+              '<!-- <script> </script\v></script>',
+              '<!-- <script></script><script></script>',
+              '<!-->',
+              '<!-- x',
+            ]
+          : ['<!-- <script>']),
       ]) {
         const tree = parser.parse(`<${tag}>${content}</${tag.toUpperCase()}><p>after</p>`)!;
         try {
