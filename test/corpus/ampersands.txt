@@ -1,0 +1,25 @@
+==================
+Bare ampersands alongside entities and tags
+==================
+<p>Users & roles && &amp; &#38; &#x26; &<b>end&</b></p>&
+---
+
+(document
+  (element
+    (start_tag (tag_name))
+    (text)
+    (text)
+    (text)
+    (text)
+    (text)
+    (entity)
+    (entity)
+    (entity)
+    (text)
+    (element
+      (start_tag (tag_name))
+      (text)
+      (text)
+      (end_tag (tag_name)))
+    (end_tag (tag_name)))
+  (text))

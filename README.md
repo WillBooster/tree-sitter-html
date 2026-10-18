@@ -19,7 +19,8 @@ number, so it loads only with the WillBooster runtime, version 2.0.0 or later
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter)); upstream's runtime rejects
 it. Input that contains NUL characters can parse to a different tree than with upstream's 0.23.2 parser, because the
 lexers that generator emits treat a NUL character as an ordinary character. This grammar also accepts literal `>`
-characters in text nodes, which upstream 0.23.2 rejects. Its scanner requires an HTML tag-name boundary after
+characters and bare `&` in text nodes, which upstream 0.23.2 rejects. A bare `&` becomes its own `text` node beside
+surrounding text, while character references remain `entity` nodes. Its scanner requires an HTML tag-name boundary after
 `</script` and `</style`, so longer names and overlapping prefixes remain raw text. Closing-name comparisons
 fold only ASCII letters, and embedded NUL characters remain part of raw-text content. Script content follows
 HTML escaped and double-escaped states, so closing-tag text inside a double escape remains raw text. Void elements close
