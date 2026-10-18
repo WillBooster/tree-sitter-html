@@ -449,6 +449,13 @@ static bool scan_comment_or_void_end(Scanner *scanner, TSLexer *lexer, bool clos
 }
 
 static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
+    if (valid_symbols[IMPLICIT_END_TAG] && lexer->eof(lexer) &&
+        top_tag(scanner) && top_tag(scanner)->type == SCRIPT) {
+        pop_tag(scanner);
+        lexer->result_symbol = IMPLICIT_END_TAG;
+        return true;
+    }
+
     if (valid_symbols[RAW_TEXT] && !valid_symbols[START_TAG_NAME] && !valid_symbols[END_TAG_NAME]) {
         return scan_raw_text(scanner, lexer);
     }
