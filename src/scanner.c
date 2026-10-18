@@ -178,11 +178,7 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
             size += TAG_RUN_SIZE;
         }
         restored_tag_count += count;
-        if (scanner->tags.size > first_restored_run) {
-            push_tags(scanner, tag, count);
-        } else {
-            array_push(&scanner->tags, ((TagRun){tag, count}));
-        }
+        push_tags(scanner, tag, count);
     }
     reverse_tag_runs(scanner, first_restored_run);
 }
