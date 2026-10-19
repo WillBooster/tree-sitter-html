@@ -6,20 +6,28 @@ Bare ampersands alongside entities and tags
 
 (document
   (element
-    (start_tag (tag_name))
+    (start_tag
+      (tag_name))
+    (text)
     (text)
     (text)
     (text)
     (text)
     (text)
     (entity)
+    (text)
     (entity)
+    (text)
     (entity)
+    (text)
     (text)
     (element
-      (start_tag (tag_name))
+      (start_tag
+        (tag_name))
       (text)
       (text)
-      (end_tag (tag_name)))
-    (end_tag (tag_name)))
+      (end_tag
+        (tag_name)))
+    (end_tag
+      (tag_name)))
   (text))
