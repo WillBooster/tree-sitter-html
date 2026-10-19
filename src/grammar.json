@@ -51,6 +51,19 @@
           "name": "processing_instruction"
         },
         {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_unfinished_processing_instruction"
+            },
+            {
+              "type": "STRING",
+              "value": ">"
+            }
+          ]
+        },
+        {
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
@@ -524,6 +537,10 @@
     {
       "type": "SYMBOL",
       "name": "_element_text"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_unfinished_processing_instruction"
     }
   ],
   "inline": [],

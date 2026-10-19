@@ -284,3 +284,39 @@ test('preserves markup inside foreign title elements and HTML text inside integr
     parser.delete();
   }
 });
+
+test('bounds recovery work for repeated unfinished instructions and completes them incrementally', () => {
+  const parser = new Parser().setLanguage(language);
+  const instruction = '<?target '.repeat(5000);
+  const source = '<p>before</p>' + instruction;
+  let progressChecks = 0;
+  const tree = parser.parse(source, undefined, { progressCallback: () => ++progressChecks > 10 });
+  try {
+    expect(tree).not.toBeNull();
+    expect(tree!.rootNode.hasError).toBe(true);
+    expect(tree!.rootNode.firstNamedChild?.text).toBe('<p>before</p>');
+    expect(tree!.rootNode.endIndex).toBe(source.length);
+    tree!.edit(
+      new Edit({
+        startIndex: source.length,
+        oldEndIndex: source.length,
+        newEndIndex: source.length + 1,
+        startPosition: { row: 0, column: source.length },
+        oldEndPosition: { row: 0, column: source.length },
+        newEndPosition: { row: 0, column: source.length + 1 },
+      })
+    );
+    const updated = parser.parse(source + '>', tree!);
+    try {
+      expect(updated!.rootNode.hasError).toBe(false);
+      expect(updated!.rootNode.descendantsOfType('processing_instruction').map((node) => node.text)).toEqual([
+        instruction + '>',
+      ]);
+    } finally {
+      updated?.delete();
+    }
+  } finally {
+    tree?.delete();
+    parser.delete();
+  }
+});

@@ -15,6 +15,7 @@ enum TokenType {
     COMMENT,
     PROCESSING_INSTRUCTION,
     ELEMENT_TEXT,
+    UNFINISHED_PROCESSING_INSTRUCTION,
 };
 
 typedef struct {
@@ -233,7 +234,10 @@ static inline int32_t ascii_upper(int32_t character) {
 static bool is_html_whitespace(int32_t character);
 static bool is_raw_name_boundary(TSLexer *lexer);
 static bool scan_processing_instruction_target(TSLexer *lexer);
-static bool tag_uses_text_tokenization(Scanner *scanner);
+typedef enum { ELEMENT_TEXT_NONE, ELEMENT_TEXT_RAW, ELEMENT_TEXT_RCDATA, ELEMENT_TEXT_PLAINTEXT } ElementTextMode;
+
+static ElementTextMode element_text_mode(Scanner *scanner);
+static ElementTextMode classify_element_text(const Tag *tag);
 static bool in_html_namespace(const Scanner *scanner);
 
 static bool scan_processing_instruction(TSLexer *lexer, const bool *valid_symbols) {
@@ -248,8 +252,8 @@ static bool scan_processing_instruction(TSLexer *lexer, const bool *valid_symbol
     while (!lexer->eof(lexer) && lexer->lookahead != '>') {
         advance(lexer);
     }
-    enum TokenType result = valid ? PROCESSING_INSTRUCTION : COMMENT;
-    if (!valid_symbols[result] || (valid && lexer->eof(lexer))) {
+    enum TokenType result = valid ? (lexer->eof(lexer) ? UNFINISHED_PROCESSING_INSTRUCTION : PROCESSING_INSTRUCTION) : COMMENT;
+    if (!valid_symbols[result]) {
         return false;
     }
     if (!lexer->eof(lexer)) {
@@ -260,22 +264,27 @@ static bool scan_processing_instruction(TSLexer *lexer, const bool *valid_symbol
     return true;
 }
 
-static bool tag_uses_text_tokenization(Scanner *scanner) {
+static ElementTextMode element_text_mode(Scanner *scanner) {
     const Tag *tag = top_tag(scanner);
-    if (!tag) {
-        return false;
-    }
-    if (tag->type != CUSTOM) {
-        return (tag->type == TEXTAREA || tag->type == TITLE || tag->type == IFRAME) && in_html_namespace(scanner);
-    }
-    static const char *names[] = {"XMP", "NOEMBED", "NOFRAMES", "PLAINTEXT"};
-    for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
-        size_t length = strlen(names[i]);
-        if (tag->custom_tag_name.size == length && memcmp(tag->custom_tag_name.contents, names[i], length) == 0) {
-            return in_html_namespace(scanner);
+    ElementTextMode mode = tag ? classify_element_text(tag) : ELEMENT_TEXT_NONE;
+    return mode != ELEMENT_TEXT_NONE && in_html_namespace(scanner) ? mode : ELEMENT_TEXT_NONE;
+}
+
+static ElementTextMode classify_element_text(const Tag *tag) {
+    if (tag->type == TEXTAREA || tag->type == TITLE) return ELEMENT_TEXT_RCDATA;
+    if (tag->type == IFRAME) return ELEMENT_TEXT_RAW;
+    if (tag->type != CUSTOM) return ELEMENT_TEXT_NONE;
+    static const struct { const char *name; ElementTextMode mode; } tags[] = {
+        {"XMP", ELEMENT_TEXT_RAW}, {"NOEMBED", ELEMENT_TEXT_RAW},
+        {"NOFRAMES", ELEMENT_TEXT_RAW}, {"PLAINTEXT", ELEMENT_TEXT_PLAINTEXT},
+    };
+    for (unsigned i = 0; i < sizeof(tags) / sizeof(tags[0]); i++) {
+        size_t length = strlen(tags[i].name);
+        if (tag->custom_tag_name.size == length && memcmp(tag->custom_tag_name.contents, tags[i].name, length) == 0) {
+            return tags[i].mode;
         }
     }
-    return false;
+    return ELEMENT_TEXT_NONE;
 }
 
 typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH } Namespace;
@@ -336,24 +345,14 @@ static bool scan_processing_instruction_target(TSLexer *lexer) {
     return valid && (lexer->eof(lexer) || (strcmp(target, "XML") != 0 && strcmp(target, "XML-STYLESHEET") != 0));
 }
 
-static bool scan_element_text(TSLexer *lexer, const Tag *tag) {
-    bool rcdata = tag->type == TEXTAREA || tag->type == TITLE;
-    bool plaintext = tag->type == CUSTOM && tag->custom_tag_name.size == 9 &&
-                     memcmp(tag->custom_tag_name.contents, "PLAINTEXT", 9) == 0;
+static bool scan_element_end(TSLexer *lexer, const Tag *tag);
+
+static bool scan_element_text(TSLexer *lexer, const Tag *tag, ElementTextMode mode) {
     bool consumed = false;
     lexer->mark_end(lexer);
-    while (!lexer->eof(lexer) && !(rcdata && lexer->lookahead == '&')) {
-        if (lexer->lookahead == '<' && !plaintext) {
-            advance(lexer);
-            if (lexer->lookahead == '/') {
-                advance(lexer);
-                Tag closing_tag = tag_for_name(scan_tag_name(lexer));
-                bool closes = tag_eq(tag, &closing_tag) && (is_raw_name_boundary(lexer) || lexer->eof(lexer));
-                tag_free(&closing_tag);
-                if (closes) {
-                    break;
-                }
-            }
+    while (!lexer->eof(lexer) && !(mode == ELEMENT_TEXT_RCDATA && lexer->lookahead == '&')) {
+        if (lexer->lookahead == '<' && mode != ELEMENT_TEXT_PLAINTEXT) {
+            if (scan_element_end(lexer, tag)) break;
         } else {
             advance(lexer);
         }
@@ -362,6 +361,16 @@ static bool scan_element_text(TSLexer *lexer, const Tag *tag) {
     }
     lexer->result_symbol = ELEMENT_TEXT;
     return consumed;
+}
+
+static bool scan_element_end(TSLexer *lexer, const Tag *tag) {
+    advance(lexer);
+    if (lexer->lookahead != '/') return false;
+    advance(lexer);
+    Tag closing_tag = tag_for_name(scan_tag_name(lexer));
+    bool closes = tag_eq(tag, &closing_tag) && (is_raw_name_boundary(lexer) || lexer->eof(lexer));
+    tag_free(&closing_tag);
+    return closes;
 }
 
 typedef enum { RAW_TEXT_NORMAL, RAW_TEXT_ESCAPED, RAW_TEXT_DOUBLE_ESCAPED } RawTextMode;
@@ -597,9 +606,9 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return scan_raw_text(scanner, lexer);
     }
 
-    if (valid_symbols[ELEMENT_TEXT] && in_content &&
-        tag_uses_text_tokenization(scanner)) {
-        return scan_element_text(lexer, top_tag(scanner));
+    ElementTextMode mode;
+    if (valid_symbols[ELEMENT_TEXT] && in_content && (mode = element_text_mode(scanner)) != ELEMENT_TEXT_NONE) {
+        return scan_element_text(lexer, top_tag(scanner), mode);
     }
 
     while (iswspace(lexer->lookahead)) {
