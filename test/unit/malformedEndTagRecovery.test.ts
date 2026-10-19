@@ -16,13 +16,14 @@ test('retains following elements while reporting malformed closing tags', () => 
       '<div>x</div x/><p>after</p>',
       '<textarea>x</textarea a=b/><p>after</p>',
       '<script>x</script/><p>after</p>',
+      '<section><div>x</div ordinary<img src=x<p>after</p></section>',
     ]) {
       const tree = parser.parse(source)!;
       try {
         expect(tree.rootNode.hasError, source).toBe(true);
         const following = tree.rootNode.descendantsOfType('element').find((node) => node.text === '<p>after</p>');
         expect(following?.startIndex, source).toBe(source.indexOf('<p'));
-        expect(following?.endIndex, source).toBe(source.length);
+        expect(following?.endIndex, source).toBe(source.indexOf('<p>after</p>') + '<p>after</p>'.length);
       } finally {
         tree.delete();
       }
@@ -208,7 +209,7 @@ test('preserves real ancestor closing tags after an unmatched slash-ended close'
 test('retains real ancestor end tags after a discarded incomplete start tag', () => {
   const parser = new Parser().setLanguage(language);
   try {
-    for (const stray of ['<img src=x', '<span', '<br', '<b/', '<a', '<a&']) {
+    for (const stray of ['<img src=x ', '<span', '<br', '<b/', '<a', '<a&']) {
       const source = `<section><div>x</div ordinary${stray}<p>after</p></section>`;
       const tree = parser.parse(source)!;
       try {
@@ -247,6 +248,82 @@ test('retains complete paragraphs and the real enclosing close after a discarded
       }
     }
   } finally {
+    parser.delete();
+  }
+});
+
+test('retains elements and real closes when malformed attribute content contains a less-than sign', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const [tag, attributes] of [
+      ['a', ' href=/q?a<b'],
+      ['div', ' a=x<b'],
+      ['p', ' a<b'],
+      ['a', ' href=/q?a<b&amp;c'],
+      ['div', ' a=x<<b'],
+      ['div', ' a=<b'],
+      ['div', ' a= <b'],
+    ]) {
+      const content = `<${tag}${attributes}>body</${tag}>`;
+      const source = `<section>${content}<p>after</p></section>`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(true);
+        const section = tree.rootNode.firstNamedChild!;
+        const children = section.namedChildren.filter((node) => node.type === 'element');
+        expect(
+          children.map((node) => node.text),
+          source
+        ).toEqual([content, '<p>after</p>']);
+        expect(children[0]?.namedChildren.find((node) => node.type === 'end_tag')?.text, source).toBe(`</${tag}>`);
+        expect(section.namedChildren.find((node) => node.type === 'end_tag')?.text, source).toBe('</section>');
+        expect([children[1]?.startIndex, children[1]?.endIndex], source).toEqual([
+          source.indexOf('<p>after'),
+          source.indexOf('</section>'),
+        ]);
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});
+
+test('retains attribute-recovery ownership after an incremental less-than insertion', () => {
+  const parser = new Parser().setLanguage(language);
+  const source = '<section><a href=/q?a>body</a><p>after</p></section>';
+  const previous = parser.parse(source)!;
+  try {
+    const startIndex = source.indexOf('>body');
+    previous.edit(
+      new Edit({
+        startIndex,
+        oldEndIndex: startIndex,
+        newEndIndex: startIndex + 2,
+        startPosition: { row: 0, column: startIndex },
+        oldEndPosition: { row: 0, column: startIndex },
+        newEndPosition: { row: 0, column: startIndex + 2 },
+      })
+    );
+    const updated = source.slice(0, startIndex) + '<b' + source.slice(startIndex);
+    const incremental = parser.parse(updated, previous)!;
+    const fresh = parser.parse(updated)!;
+    try {
+      expect(incremental.rootNode.hasError).toBe(true);
+      expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
+      const section = incremental.rootNode.firstNamedChild!;
+      expect(section.namedChildren.filter((node) => node.type === 'element').map((node) => node.text)).toEqual([
+        '<a href=/q?a<b>body</a>',
+        '<p>after</p>',
+      ]);
+      expect(section.namedChildren.find((node) => node.type === 'end_tag')?.text).toBe('</section>');
+    } finally {
+      incremental.delete();
+      fresh.delete();
+    }
+  } finally {
+    previous.delete();
     parser.delete();
   }
 });
