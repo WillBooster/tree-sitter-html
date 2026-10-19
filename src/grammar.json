@@ -382,7 +382,7 @@
       "value": "[^<>\"'=\\s]+"
     },
     "entity": {
-      "type": "IMMEDIATE_TOKEN",
+      "type": "TOKEN",
       "content": {
         "type": "PATTERN",
         "value": "&(#([xX][0-9a-fA-F]{1,6}|[0-9]{1,5})|[A-Za-z]{1,30});?"

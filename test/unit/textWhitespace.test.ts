@@ -56,6 +56,46 @@ test.each(sources)('retains complete text ranges around markup in %j', (source) 
   }
 });
 
+test.each(['&amp;', '&#123;', '&#x3b1;'])(
+  'recovers the exact character reference %s after a stray less-than sign',
+  (entity) => {
+    const source = `x < \n${entity} y`;
+    const tree = parser.parse(source)!;
+    try {
+      expect(tree.rootNode.hasError).toBe(true);
+      expect(tree.rootNode.descendantsOfType('ERROR').map((node) => node.text)).toEqual(['<']);
+      expect(
+        tree.rootNode.descendantsOfType('entity').map((node) => [node.text, node.startIndex, node.endIndex])
+      ).toEqual([[entity, source.indexOf(entity), source.indexOf(entity) + entity.length]]);
+      expectContentRanges(tree.rootNode);
+      tree.edit(
+        new Edit({
+          startIndex: 2,
+          oldEndIndex: 3,
+          newEndIndex: 2,
+          startPosition: { row: 0, column: 2 },
+          oldEndPosition: { row: 0, column: 3 },
+          newEndPosition: { row: 0, column: 2 },
+        })
+      );
+      const edited = source.slice(0, 2) + source.slice(3);
+      const incremental = parser.parse(edited, tree)!;
+      const fresh = parser.parse(edited)!;
+      try {
+        expect(incremental.rootNode.hasError).toBe(false);
+        expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
+        expect(incremental.rootNode.descendantsOfType('entity').map((node) => node.text)).toEqual([entity]);
+        expectContentRanges(incremental.rootNode);
+      } finally {
+        incremental.delete();
+        fresh.delete();
+      }
+    } finally {
+      tree.delete();
+    }
+  }
+);
+
 function expectContentRanges(node: Node): void {
   if (['document', 'element', 'script_element', 'style_element'].includes(node.type)) {
     expect(node.namedChildren.map((child) => child.text).join('')).toBe(node.text);
