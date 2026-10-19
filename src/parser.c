@@ -100,7 +100,7 @@ static const char * const ts_symbol_names[] = {
   [sym_comment] = "comment",
   [sym__attribute_entity] = "entity",
   [sym__unquoted_attribute_entity] = "entity",
-  [sym__attribute_ampersand] = "&",
+  [sym__attribute_ampersand] = "_attribute_ampersand",
   [sym__unquoted_attribute_fragment] = "_unquoted_attribute_fragment",
   [sym_document] = "document",
   [sym_doctype] = "doctype",
@@ -286,8 +286,8 @@ static const TSSymbolMetadata ts_symbol_metadata[] = {
     .named = true,
   },
   [sym__attribute_ampersand] = {
-    .visible = true,
-    .named = false,
+    .visible = false,
+    .named = true,
   },
   [sym__unquoted_attribute_fragment] = {
     .visible = false,

@@ -132,12 +132,12 @@ module.exports = grammar({
       choice(
         alias($._unquoted_attribute_entity, $.entity),
         /[^<>"'=\s&]+/,
-        alias($._attribute_ampersand, '&'),
+        $._attribute_ampersand,
       ),
       repeat(choice(
         alias($._attribute_entity, $.entity),
         $._unquoted_attribute_fragment,
-        alias($._attribute_ampersand, '&'),
+        $._attribute_ampersand,
       )),
     ),
 
@@ -147,12 +147,12 @@ module.exports = grammar({
       seq('\'', optional(alias(repeat1(choice(
         alias($._attribute_entity, $.entity),
         token.immediate(/[^'&]+/),
-        alias($._attribute_ampersand, '&'),
+        $._attribute_ampersand,
       )), $.attribute_value)), '\''),
       seq('"', optional(alias(repeat1(choice(
         alias($._attribute_entity, $.entity),
         token.immediate(/[^"&]+/),
-        alias($._attribute_ampersand, '&'),
+        $._attribute_ampersand,
       )), $.attribute_value)), '"'),
     ),
 

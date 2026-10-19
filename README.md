@@ -35,9 +35,9 @@ tags close. Custom tag names longer than 255 bytes are truncated in serialized s
 Malformed input after a void element can replace its enclosing element with an `ERROR` node during recovery.
 
 Attribute values retain their complete `attribute_value` range and expose recognized named and numeric character
-references as `entity` children. Quoted values retain their `quoted_attribute_value` wrapper. Other value content is
-unnamed, so injections targeting `attribute_value` should set `injection.include-children` when they need the original
-reference spellings. Legacy names without a semicolon remain literal before an ASCII letter, digit, or `=`; unknown
+references as `entity` children. Quoted values retain their `quoted_attribute_value` wrapper. Other value content,
+including literal ampersands, has no child nodes, so injections targeting `attribute_value` retain it by default. Set `injection.include-children` when the injected language needs the original reference
+spellings. Legacy names without a semicolon remain literal before an ASCII letter, digit, or `=`; unknown
 names and incomplete numeric prefixes remain literal. Comments are document or element content, and are not accepted
 between attributes. Comment-shaped text inside a quoted value remains part of that value.
 

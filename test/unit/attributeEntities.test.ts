@@ -51,6 +51,7 @@ test('keeps ambiguous ampersands and incomplete references in the attribute valu
         expect(tree.rootNode.hasError, source).toBe(false);
         expect(tree.rootNode.descendantsOfType('attribute_value').map((node) => node.text)).toEqual([value]);
         expect(tree.rootNode.descendantsOfType('entity')).toHaveLength(0);
+        expect(tree.rootNode.descendantsOfType('attribute_value')[0]!.children).toHaveLength(0);
         expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
       } finally {
         tree.delete();
@@ -73,6 +74,7 @@ test('keeps literal ampersands inside one unquoted value before the next attribu
         'keep&amp;me',
       ]);
       expect(tree.rootNode.descendantsOfType('entity').map((node) => node.text)).toEqual(['&amp;']);
+      expect(tree.rootNode.descendantsOfType('attribute_value')[0]!.children).toHaveLength(0);
       expect(tree.rootNode.descendantsOfType('attribute_name').map((node) => node.text)).toEqual(['title', 'other']);
       expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
     } finally {
@@ -254,6 +256,31 @@ test('incrementally updates an attribute reference without changing neighboring 
     }
   } finally {
     previous.delete();
+    parser.delete();
+  }
+});
+
+test('exposes only references as children of values containing literal ampersands', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const quote of ['"', "'", '']) {
+      const value = quote ? 'a && b &amp; c &unknown;' : 'a&&b&amp;c&unknown;';
+      const source = `<a title=${quote}${value}${quote}></a><p>after</p>`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(false);
+        const attribute = tree.rootNode.descendantsOfType('attribute_value')[0]!;
+        expect(attribute.text, source).toBe(value);
+        expect(
+          attribute.children.map((node) => ({ type: node.type, named: node.isNamed, text: node.text })),
+          source
+        ).toEqual([{ type: 'entity', named: true, text: '&amp;' }]);
+        expect(tree.rootNode.lastNamedChild?.text, source).toBe('<p>after</p>');
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
     parser.delete();
   }
 });
