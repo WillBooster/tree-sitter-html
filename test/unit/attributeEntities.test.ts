@@ -139,6 +139,38 @@ test('keeps comment-shaped attribute content literal and comments outside tags i
   }
 });
 
+test('keeps a contiguous slash in unquoted values and distinguishes separated self-closing delimiters', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const value of ['foo&amp;/', 'foo&/', 'foo/', '&amp;/', '&/', '&#65/', '&unknown;/']) {
+      const source = `<a title=${value}>body</a><p>after</p>`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(false);
+        expect(tree.rootNode.descendantsOfType('attribute_value').map((node) => node.text)).toEqual([value]);
+        expect(tree.rootNode.firstNamedChild?.text).toBe(`<a title=${value}>body</a>`);
+        expect(tree.rootNode.descendantsOfType('self_closing_tag')).toHaveLength(0);
+        expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+      } finally {
+        tree.delete();
+      }
+    }
+    for (const source of ['<a title=foo&amp; /><p>after</p>', '<a title="foo&amp;"/><p>after</p>']) {
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(false);
+        expect(tree.rootNode.descendantsOfType('self_closing_tag')).toHaveLength(1);
+        expect(tree.rootNode.descendantsOfType('attribute_value').map((node) => node.text)).toEqual(['foo&amp;']);
+        expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});
+
 test('incrementally updates an attribute reference without changing neighboring values', () => {
   const parser = new Parser().setLanguage(language);
   const source = '<a title="before &copy=1 after" other="keep&amp;me">body</a><p>after</p>';

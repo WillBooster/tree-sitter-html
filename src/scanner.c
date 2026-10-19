@@ -481,6 +481,10 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return scan_attribute_entity(lexer, ATTRIBUTE_ENTITY);
     }
 
+    if (valid_symbols[ATTRIBUTE_ENTITY] && !valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY] && lexer->lookahead == '/') {
+        return false;
+    }
+
     while (iswspace(lexer->lookahead)) {
         skip(lexer);
     }
