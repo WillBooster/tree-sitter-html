@@ -37,6 +37,7 @@ static bool close_void_element(Scanner *scanner, TSLexer *lexer);
 static bool scan_contiguous_attribute_content(TSLexer *lexer, const bool *valid_symbols);
 static bool scan_unquoted_attribute_fragment(TSLexer *lexer);
 static bool is_unquoted_attribute_content(int32_t character);
+static bool is_attribute_whitespace(int32_t character);
 
 static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
 
@@ -502,7 +503,7 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return close_void && close_void_element(scanner, lexer);
     }
 
-    while (iswspace(lexer->lookahead)) {
+    while (is_attribute_whitespace(lexer->lookahead)) {
         skip(lexer);
     }
     if (valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY] && !valid_symbols[START_TAG_NAME] && lexer->lookahead == '&') {
@@ -567,9 +568,13 @@ static bool scan_unquoted_attribute_fragment(TSLexer *lexer) {
 }
 
 static bool is_unquoted_attribute_content(int32_t character) {
-    return !(character >= '\t' && character <= '\r') && character != ' ' &&
+    return !is_attribute_whitespace(character) &&
            character != '<' && character != '>' && character != '"' && character != '\'' &&
            character != '=' && character != '&';
+}
+
+static bool is_attribute_whitespace(int32_t character) {
+    return (character >= '\t' && character <= '\r') || character == ' ';
 }
 
 void *tree_sitter_html_external_scanner_create() {

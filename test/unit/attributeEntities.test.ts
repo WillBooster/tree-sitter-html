@@ -284,3 +284,31 @@ test('exposes only references as children of values containing literal ampersand
     parser.delete();
   }
 });
+
+test('preserves non-ASCII whitespace before references in unquoted values', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const space of ['\u3000', '\u00A0', '\u2003', '\u200B', '\u0085', '\u2028', '\u2029']) {
+      for (const reference of ['&amp;', '&unknown;', '&&x']) {
+        const value = space + reference;
+        const source = `<a title= \t${value}></a><p>after</p>`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+          const attribute = tree.rootNode.descendantsOfType('attribute_value')[0]!;
+          expect(attribute.text, source).toBe(value);
+          expect(source.slice(attribute.startIndex, attribute.endIndex), source).toBe(value);
+          expect(
+            attribute.children.map((node) => node.text),
+            source
+          ).toEqual(reference === '&amp;' ? ['&amp;'] : []);
+          expect(tree.rootNode.lastNamedChild?.text, source).toBe('<p>after</p>');
+        } finally {
+          tree.delete();
+        }
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});
