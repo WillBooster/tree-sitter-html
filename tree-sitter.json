@@ -6,7 +6,7 @@
       "camelcase": "HTML",
       "scope": "source.html",
       "path": ".",
-      "external-files": ["src/tag.h"],
+      "external-files": ["src/tag.h", "src/attributeEntity.h", "src/entities.h"],
       "file-types": ["html"],
       "highlights": "queries/highlights.scm",
       "injections": "queries/injections.scm",
