@@ -204,3 +204,49 @@ test('preserves real ancestor closing tags after an unmatched slash-ended close'
     parser.delete();
   }
 });
+
+test('retains real ancestor end tags after a discarded incomplete start tag', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const stray of ['<img src=x', '<span', '<br', '<b/', '<a', '<a&']) {
+      const source = `<section><div>x</div ordinary${stray}<p>after</p></section>`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(true);
+        const section = tree.rootNode.firstNamedChild!;
+        expect(section.endIndex, source).toBe(source.length);
+        expect(section.namedChildren.find((node) => node.type === 'end_tag')?.text, source).toBe('</section>');
+        const following = section.descendantsOfType('element').find((node) => node.text === '<p>after</p>');
+        expect(following?.startIndex, source).toBe(source.indexOf('<p>'));
+        expect(following?.endIndex, source).toBe(source.indexOf('</section>'));
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});
+
+test('retains complete paragraphs and the real enclosing close after a discarded paragraph opener', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const close of ['divq', 'divp']) {
+      const source = `<div>x</${close}><p<p>after</p></div>`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(true);
+        const outer = tree.rootNode.firstNamedChild!;
+        expect(outer.endIndex, source).toBe(source.length);
+        expect(outer.namedChildren.find((node) => node.type === 'end_tag')?.text, source).toBe('</div>');
+        const following = outer.descendantsOfType('element').find((node) => node.text === '<p>after</p>');
+        expect(following?.startIndex, source).toBe(source.indexOf('<p>'));
+        expect(following?.endIndex, source).toBe(source.indexOf('</div>'));
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});

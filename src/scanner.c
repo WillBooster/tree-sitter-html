@@ -38,7 +38,7 @@ static bool scan_contiguous_attribute_content(TSLexer *lexer, const bool *valid_
 static bool scan_unquoted_attribute_fragment(TSLexer *lexer);
 static bool is_unquoted_attribute_content(int32_t character);
 static bool is_attribute_whitespace(int32_t character);
-static bool has_end_tag_terminator(TSLexer *lexer);
+static bool has_tag_terminator(TSLexer *lexer, bool closing);
 
 static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
 
@@ -357,7 +357,7 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     if (is_closing_tag) {
         if (parent && tag_eq(parent, &next_tag)) {
             bool close_raw = (parent->type == SCRIPT || parent->type == STYLE) &&
-                             !has_end_tag_terminator(lexer);
+                             !has_tag_terminator(lexer, true);
             tag_free(&next_tag);
             if (close_raw) {
                 pop_tag(scanner);
@@ -398,6 +398,12 @@ static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
         return false;
     }
 
+    lexer->mark_end(lexer);
+    if (!has_tag_terminator(lexer, false)) {
+        array_delete(&tag_name);
+        return false;
+    }
+
     Tag tag = tag_for_name(tag_name);
     push_tags(scanner, tag, 1);
     switch (tag.type) {
@@ -424,7 +430,7 @@ static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer, bool valid_end_t
 
     lexer->mark_end(lexer);
     if (valid_end_tag) {
-        if (!has_end_tag_terminator(lexer)) {
+        if (!has_tag_terminator(lexer, true)) {
             array_delete(&tag_name);
             return false;
         }
@@ -590,11 +596,11 @@ static bool is_unquoted_attribute_content(int32_t character) {
            character != '=' && character != '&';
 }
 
-static bool has_end_tag_terminator(TSLexer *lexer) {
+static bool has_tag_terminator(TSLexer *lexer, bool closing) {
     while (iswspace(lexer->lookahead)) {
         advance(lexer);
     }
-    if (lexer->lookahead == '>' || lexer->lookahead == '&' || lexer->eof(lexer)) {
+    if (closing && (lexer->lookahead == '&' || lexer->eof(lexer))) {
         return true;
     }
     int32_t quote = 0;
@@ -609,7 +615,7 @@ static bool has_end_tag_terminator(TSLexer *lexer) {
             quote = lexer->lookahead;
             value_start = false;
         } else if (lexer->lookahead == '>') {
-            return previous != '/';
+            return !closing || previous != '/';
         } else if (lexer->lookahead == '<') {
             return false;
         } else if (lexer->lookahead == '=') {
