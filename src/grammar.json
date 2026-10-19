@@ -426,15 +426,8 @@
                 "value": "entity"
               },
               {
-                "type": "IMMEDIATE_TOKEN",
-                "content": {
-                  "type": "PREC",
-                  "value": 1,
-                  "content": {
-                    "type": "PATTERN",
-                    "value": "[^<>\"'=\\s&]+"
-                  }
-                }
+                "type": "SYMBOL",
+                "name": "_unquoted_attribute_fragment"
               },
               {
                 "type": "ALIAS",
@@ -638,6 +631,10 @@
     {
       "type": "SYMBOL",
       "name": "_attribute_ampersand"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_unquoted_attribute_fragment"
     }
   ],
   "inline": [],

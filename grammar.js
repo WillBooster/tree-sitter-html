@@ -28,6 +28,7 @@ module.exports = grammar({
     $._attribute_entity,
     $._unquoted_attribute_entity,
     $._attribute_ampersand,
+    $._unquoted_attribute_fragment,
   ],
 
   rules: {
@@ -135,7 +136,7 @@ module.exports = grammar({
       ),
       repeat(choice(
         alias($._attribute_entity, $.entity),
-        token.immediate(prec(1, /[^<>"'=\s&]+/)),
+        $._unquoted_attribute_fragment,
         alias($._attribute_ampersand, '&'),
       )),
     ),

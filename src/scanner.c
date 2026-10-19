@@ -17,6 +17,7 @@ enum TokenType {
     ATTRIBUTE_ENTITY,
     UNQUOTED_ATTRIBUTE_ENTITY,
     ATTRIBUTE_AMPERSAND,
+    UNQUOTED_ATTRIBUTE_FRAGMENT,
 };
 
 typedef struct {
@@ -31,6 +32,9 @@ typedef struct {
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+
+static bool scan_unquoted_attribute_fragment(TSLexer *lexer);
+static bool is_unquoted_attribute_content(int32_t character);
 
 static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
 
@@ -478,6 +482,11 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return scan_raw_text(scanner, lexer);
     }
 
+    if (valid_symbols[UNQUOTED_ATTRIBUTE_FRAGMENT] && !valid_symbols[START_TAG_NAME] &&
+        !lexer->eof(lexer) && is_unquoted_attribute_content(lexer->lookahead)) {
+        return scan_unquoted_attribute_fragment(lexer);
+    }
+
     if (valid_symbols[ATTRIBUTE_ENTITY] && !valid_symbols[START_TAG_NAME] && lexer->lookahead == '&') {
         return scan_attribute_entity(lexer, ATTRIBUTE_ENTITY, ATTRIBUTE_AMPERSAND);
     }
@@ -527,6 +536,21 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     }
 
     return false;
+}
+
+static bool scan_unquoted_attribute_fragment(TSLexer *lexer) {
+    do {
+        advance(lexer);
+    } while (!lexer->eof(lexer) && is_unquoted_attribute_content(lexer->lookahead));
+    lexer->mark_end(lexer);
+    lexer->result_symbol = UNQUOTED_ATTRIBUTE_FRAGMENT;
+    return true;
+}
+
+static bool is_unquoted_attribute_content(int32_t character) {
+    return !(character >= '\t' && character <= '\r') && character != ' ' &&
+           character != '<' && character != '>' && character != '"' && character != '\'' &&
+           character != '=' && character != '&';
 }
 
 void *tree_sitter_html_external_scanner_create() {

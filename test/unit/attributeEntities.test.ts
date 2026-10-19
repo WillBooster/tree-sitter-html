@@ -193,6 +193,33 @@ test('keeps following elements when an end-tag terminator is missing before a re
   }
 });
 
+test('preserves raw-text elements after an unterminated unquoted start tag', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const tag of ['script', 'style']) {
+      for (const value of ['x', 'x&amp;y', 'x&unknown;', 'x&', 'x/']) {
+        for (const gap of ['', ' ', '\n']) {
+          const body = value === 'x' ? 'a' : 'content "<b>" & value';
+          const source = `<img src=${value}${gap}<${tag}>${body}</${tag}><p>after</p>`;
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError, source).toBe(true);
+            const rawElement = tree.rootNode.descendantsOfType(`${tag}_element`);
+            expect(rawElement, source).toHaveLength(1);
+            expect(rawElement[0]!.descendantsOfType('raw_text').map((node) => node.text)).toEqual([body]);
+            expect(tree.rootNode.descendantsOfType('tag_name').map((node) => node.text)).not.toContain('b');
+            expect(tree.rootNode.lastNamedChild?.text, source).toBe('<p>after</p>');
+          } finally {
+            tree.delete();
+          }
+        }
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});
+
 test('incrementally updates an attribute reference without changing neighboring values', () => {
   const parser = new Parser().setLanguage(language);
   const source = '<a title="before &copy=1 after" other="keep&amp;me">body</a><p>after</p>';
