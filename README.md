@@ -20,18 +20,25 @@ number, so it loads only with the WillBooster runtime, version 2.x
 it. Input that contains NUL characters can parse to a different tree than with upstream's 0.23.2 parser, because the
 lexers that generator emits treat a NUL character as an ordinary character. This grammar also accepts literal `>`
 characters and bare `&` in text nodes, which upstream 0.23.2 rejects. A bare `&` becomes its own `text` node beside
-surrounding text, while character references remain `entity` nodes. Text nodes include leading, trailing, and whitespace-only content, including whitespace between markup and character references. A DOCTYPE declaration exposes its uninterpreted body as a `doctype_value` child, including legacy PUBLIC or SYSTEM identifiers. The grammar's scanner requires an HTML tag-name boundary after
+surrounding text, while character references remain `entity` nodes. Text nodes include leading, trailing, and whitespace-only content, including whitespace between markup and character references. A DOCTYPE declaration exposes its uninterpreted body as a `doctype_value` child, including legacy PUBLIC or SYSTEM identifiers. Processing instructions use source-preserving
+`processing_instruction` nodes and directive highlights. Delimited `xml` and `xml-stylesheet` targets in any ASCII
+case, including XML declarations, and malformed targets produce `comment` nodes. Valid targets start with an ASCII
+letter or `_` and continue with ASCII letters, digits, `-` or `_`. A valid-target instruction without a closing `>`
+reports an error. In HTML-namespace `title` and `textarea`, tags, comments,
+and instructions stay `text`, while character references remain `entity` nodes. Content inside `iframe`, `xmp`,
+`noembed`, and `noframes` also stays `text` up to the element's own closing tag. `plaintext` retains all remaining
+input as `text`, including closing tags. The grammar's scanner requires an HTML tag-name boundary after
 `</script` and `</style`, so longer names and overlapping prefixes remain raw text. Closing-name comparisons
 fold only ASCII letters, and embedded NUL characters remain part of raw-text content. Script content follows
 HTML escaped and double-escaped states, so closing-tag text inside a double escape remains raw text. A script that reaches
 EOF while scanning raw content closes implicitly without an error: its `script_element` has no `end_tag` child, and its
 remaining content stays available for JavaScript injection. Incomplete closing tags such as `</script` still report
 recovery errors. Unterminated style elements still report an error. Void elements close
-before following text, entities, and complete comments, which become siblings instead of children.
+before following text, entities, complete comments, and processing instructions, which become siblings instead of children.
 Scanner serialization stores the open-tag stack from its innermost tag, compressing runs of identical tags, so active
-void, script, and style elements retain their identities when deeply nested. When deep nesting of distinct tags
-exceeds its fixed-size buffer, the outermost tag identities are lost, which can produce recovery errors when those
-tags close. Custom tag names longer than 255 bytes are truncated in serialized state.
+void, script, and style elements retain their identities when deeply nested. When distinct tags exceed the fixed-size
+buffer, serialization prioritizes inner tags and outer namespace boundaries, replacing ordinary outer tags with unknown
+runs. Lost tag identities can still produce recovery errors when those tags close. Custom tag names longer than 255 bytes are truncated in serialized state.
 Malformed input after a void element can replace its enclosing element with an `ERROR` node during recovery.
 
 Attribute values retain their complete `attribute_value` range and expose recognized named and numeric character
@@ -91,7 +98,7 @@ fuzzed with:
 ```toml
 [dependencies]
 tree-sitter = { package = "willbooster-tree-sitter", version = "2.0.0" }
-tree-sitter-html = { package = "willbooster-tree-sitter-html", version = "3" }
+tree-sitter-html = { package = "willbooster-tree-sitter-html", version = "4" }
 ```
 
 ```rust
