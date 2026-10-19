@@ -10,7 +10,7 @@ test('exposes references inside complete quoted and unquoted attribute values', 
   const query = new Query(language, '(attribute_value (entity) @reference)');
   try {
     for (const delimiter of ['"', "'", '']) {
-      const value = 'before&amp;&#128512;&#X000041;&CounterClockwiseContourIntegral;after';
+      const value = '😀before&amp;&#128512;&#X000041;&CounterClockwiseContourIntegral;&amp;after';
       const source = `<a title= ${delimiter}${value}${delimiter}>body&amp;tail</a><p>after</p>`;
       const tree = parser.parse(source)!;
       try {
@@ -19,14 +19,16 @@ test('exposes references inside complete quoted and unquoted attribute values', 
         expect(attribute).toHaveLength(1);
         expect(attribute[0]!.text).toBe(value);
         const references = query.captures(tree.rootNode).map(({ node }) => node);
-        expect(references.map((node) => node.text)).toEqual([
-          '&amp;',
-          '&#128512;',
-          '&#X000041;',
-          '&CounterClockwiseContourIntegral;',
-        ]);
+        const spellings = ['&amp;', '&#128512;', '&#X000041;', '&CounterClockwiseContourIntegral;', '&amp;'];
+        expect(references.map((node) => node.text)).toEqual(spellings);
+        let offset = source.indexOf(value) + '😀before'.length;
+        const ranges = spellings.map((spelling) => {
+          const start = offset;
+          offset += spelling.length;
+          return [start, offset];
+        });
+        expect(references.map((node) => [node.startIndex, node.endIndex])).toEqual(ranges);
         for (const reference of references) {
-          expect(source.slice(reference.startIndex, reference.endIndex)).toBe(reference.text);
           expect(reference.parent?.id).toBe(attribute[0]!.id);
         }
         expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
