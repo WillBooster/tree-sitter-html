@@ -24,7 +24,7 @@ surrounding text, while character references remain `entity` nodes. Processing i
 `processing_instruction` nodes and directive highlights. In HTML-namespace `title` and `textarea`, tags, comments,
 and instructions stay `text`, while character references remain `entity` nodes. Content inside `iframe`, `xmp`,
 `noembed`, and `noframes` also stays `text` up to the element's own closing tag. `plaintext` retains all remaining
-input as `text`, including closing tags. Its scanner requires an HTML tag-name boundary after
+input as `text`, including closing tags. Text in these elements preserves leading, trailing, and whitespace-only content. Its scanner requires an HTML tag-name boundary after
 `</script` and `</style`, so longer names and overlapping prefixes remain raw text. Closing-name comparisons
 fold only ASCII letters, and embedded NUL characters remain part of raw-text content. Script content follows
 HTML escaped and double-escaped states, so closing-tag text inside a double escape remains raw text. A script that reaches
