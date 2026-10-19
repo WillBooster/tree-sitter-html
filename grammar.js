@@ -25,6 +25,9 @@ module.exports = grammar({
     $._implicit_end_tag,
     $.raw_text,
     $.comment,
+    $.processing_instruction,
+    $._element_text,
+    $._unfinished_processing_instruction,
     $._attribute_entity,
     $._unquoted_attribute_entity,
     $._attribute_ampersand,
@@ -47,6 +50,9 @@ module.exports = grammar({
 
     _node: $ => choice(
       $.doctype,
+      $.processing_instruction,
+      seq($._unfinished_processing_instruction, '>'),
+      alias($._element_text, $.text),
       $.comment,
       $.entity,
       $.text,

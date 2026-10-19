@@ -14,11 +14,16 @@ enum TokenType {
     IMPLICIT_END_TAG,
     RAW_TEXT,
     COMMENT,
+    PROCESSING_INSTRUCTION,
+    ELEMENT_TEXT,
+    UNFINISHED_PROCESSING_INSTRUCTION,
     ATTRIBUTE_ENTITY,
     UNQUOTED_ATTRIBUTE_ENTITY,
     ATTRIBUTE_AMPERSAND,
     UNQUOTED_ATTRIBUTE_FRAGMENT,
 };
+
+typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH } Namespace;
 
 typedef struct {
     Tag tag;
@@ -28,7 +33,11 @@ typedef struct {
 // Consecutive identical open tags share one run, so deep repeated nesting stays cheap to scan, serialize, and restore.
 typedef struct {
     Array(TagRun) tags;
+    Namespace omitted_namespace;
 } Scanner;
+
+static Namespace child_namespace(Namespace current, const Tag *tag);
+static Namespace namespace_after_tag(Namespace current, const Tag *tag);
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -63,6 +72,7 @@ static void pop_tag(Scanner *scanner) {
     if (--top->count == 0) {
         tag_free(&top->tag);
         scanner->tags.size--;
+        if (scanner->tags.size == 0) scanner->omitted_namespace = NAMESPACE_HTML;
     }
 }
 
@@ -71,6 +81,7 @@ static void clear_tags(Scanner *scanner) {
         tag_free(&scanner->tags.contents[i].tag);
     }
     array_clear(&scanner->tags);
+    scanner->omitted_namespace = NAMESPACE_HTML;
 }
 
 // Follows a serialized tag to repeat it the number of times in the next two bytes; no tag type uses this byte.
@@ -92,7 +103,6 @@ static unsigned write_tag(const Tag *tag, char *buffer, unsigned size) {
     return size;
 }
 
-// Writes as many of `count` copies of `tag` as fit and returns how many were written.
 static uint16_t write_tag_run(const Tag *tag, uint16_t count, char *buffer, unsigned *size) {
     unsigned tag_size = serialized_tag_size(tag);
     if (*size + tag_size > TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
@@ -114,8 +124,14 @@ static uint16_t write_tag_run(const Tag *tag, uint16_t count, char *buffer, unsi
     return written;
 }
 
-// Serializes the innermost tags first, which void-element closing and raw-text scanning depend on, so that tags
-// that do not fit are the outermost ones, which deserialize as unknown.
+static unsigned retained_tag_run_start(const Scanner *scanner);
+static bool namespace_boundary_tag(const Tag *tag);
+
+static uint16_t write_unknown_tags(unsigned count, char *buffer, unsigned *size) {
+    Tag unknown = tag_new();
+    return write_tag_run(&unknown, MIN(count, UINT16_MAX), buffer, size);
+}
+
 static unsigned serialize(Scanner *scanner, char *buffer) {
     unsigned depth = 0;
     for (unsigned i = 0; i < scanner->tags.size; i++) {
@@ -127,19 +143,90 @@ static unsigned serialize(Scanner *scanner, char *buffer) {
     unsigned size = sizeof(serialized_tag_count);
     memcpy(&buffer[size], &tag_count, sizeof(tag_count));
     size += sizeof(tag_count);
+    unsigned namespace_offset = size++;
 
+    unsigned retained_start = retained_tag_run_start(scanner);
+    unsigned unknown_count = 0;
     for (unsigned i = scanner->tags.size; i > 0 && serialized_tag_count < tag_count; i--) {
         const TagRun *run = &scanner->tags.contents[i - 1];
+        if (i <= retained_start && !namespace_boundary_tag(&run->tag)) {
+            unknown_count += run->count;
+            continue;
+        }
+        if (unknown_count > 0) {
+            serialized_tag_count += write_unknown_tags(MIN(unknown_count, tag_count - serialized_tag_count), buffer, &size);
+            unknown_count = 0;
+            if (serialized_tag_count == tag_count) break;
+        }
         uint16_t count = MIN(run->count, (unsigned)(tag_count - serialized_tag_count));
         uint16_t written = write_tag_run(&run->tag, count, buffer, &size);
         serialized_tag_count += written;
-        if (written < count) {
-            break;
-        }
+        if (written < count) break;
+    }
+    if (unknown_count > 0 && serialized_tag_count < tag_count) {
+        serialized_tag_count += write_unknown_tags(MIN(unknown_count, tag_count - serialized_tag_count), buffer, &size);
     }
 
+    Namespace boundary = scanner->omitted_namespace;
+    unsigned omitted = depth - serialized_tag_count;
+    for (unsigned i = 0; i < scanner->tags.size && omitted > 0; i++) {
+        const TagRun *run = &scanner->tags.contents[i];
+        unsigned count = MIN(run->count, omitted);
+        for (unsigned j = 0; j < count; j++) {
+            Namespace next = namespace_after_tag(boundary, &run->tag);
+            if (next == boundary) break;
+            boundary = next;
+        }
+        omitted -= count;
+    }
+    buffer[namespace_offset] = (char)boundary;
     memcpy(&buffer[0], &serialized_tag_count, sizeof(serialized_tag_count));
     return size;
+}
+
+static unsigned serialized_run_size(const Tag *tag, unsigned count) {
+    if (count == 0) return 0;
+    unsigned size = serialized_tag_size(tag);
+    return MIN((uint64_t)size * count, size + TAG_RUN_SIZE);
+}
+
+static unsigned retained_tag_run_start(const Scanner *scanner) {
+    unsigned capacity = TREE_SITTER_SERIALIZATION_BUFFER_SIZE - 2 * sizeof(uint16_t) - 1;
+    unsigned suffix_size = 0;
+    for (unsigned i = 0; i < scanner->tags.size; i++) {
+        const TagRun *run = &scanner->tags.contents[i];
+        suffix_size += serialized_run_size(&run->tag, run->count);
+    }
+    if (suffix_size <= capacity) return 0;
+    Array(unsigned) prefix_sizes = array_new();
+    array_push(&prefix_sizes, 0);
+    unsigned prefix_size = 0;
+    unsigned unknown_count = 0;
+    Tag unknown = tag_new();
+    for (unsigned i = 0; i < scanner->tags.size; i++) {
+        const TagRun *run = &scanner->tags.contents[i];
+        if (namespace_boundary_tag(&run->tag)) {
+            prefix_size += serialized_run_size(&unknown, unknown_count) + serialized_run_size(&run->tag, run->count);
+            unknown_count = 0;
+        } else {
+            unknown_count += run->count;
+        }
+        array_push(&prefix_sizes, prefix_size + serialized_run_size(&unknown, unknown_count));
+    }
+    unsigned retained_start = 0;
+    while (retained_start < scanner->tags.size && prefix_sizes.contents[retained_start] + suffix_size > capacity) {
+        const TagRun *run = &scanner->tags.contents[retained_start++];
+        suffix_size -= serialized_run_size(&run->tag, run->count);
+    }
+    if (prefix_sizes.contents[retained_start] + suffix_size > capacity) retained_start = 0;
+    array_delete(&prefix_sizes);
+    return retained_start;
+}
+
+static bool namespace_boundary_tag(const Tag *tag) {
+    return tag->type == SVG || tag->type == MATH ||
+           child_namespace(NAMESPACE_SVG, tag) == NAMESPACE_HTML ||
+           child_namespace(NAMESPACE_MATH, tag) == NAMESPACE_HTML;
 }
 
 static Tag read_tag(const char *buffer, unsigned *size) {
@@ -174,6 +261,7 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
     size += sizeof(serialized_tag_count);
     memcpy(&tag_count, &buffer[size], sizeof(tag_count));
     size += sizeof(tag_count);
+    scanner->omitted_namespace = (Namespace)(uint8_t)buffer[size++];
 
     if (tag_count > serialized_tag_count) {
         push_tags(scanner, tag_new(), tag_count - serialized_tag_count);
@@ -195,13 +283,30 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
     reverse_tag_runs(scanner, first_restored_run);
 }
 
+static inline int32_t ascii_upper(int32_t character);
+static void append_utf8(String *text, uint32_t character);
+
 static String scan_tag_name(TSLexer *lexer) {
     String tag_name = array_new();
     while (iswalnum(lexer->lookahead) || lexer->lookahead == '-' || lexer->lookahead == ':') {
-        array_push(&tag_name, towupper(lexer->lookahead));
+        append_utf8(&tag_name, ascii_upper(lexer->lookahead));
         advance(lexer);
     }
     return tag_name;
+}
+
+static void append_utf8(String *text, uint32_t character) {
+    if (character < 0x80) {
+        array_push(text, character);
+        return;
+    }
+    unsigned continuation_count = character < 0x800 ? 1 : character < 0x10000 ? 2 : 3;
+    uint8_t prefix = continuation_count == 1 ? 0xC0 : continuation_count == 2 ? 0xE0 : 0xF0;
+    array_push(text, prefix | (character >> (6 * continuation_count)));
+    while (continuation_count) {
+        continuation_count--;
+        array_push(text, 0x80 | ((character >> (6 * continuation_count)) & 0x3F));
+    }
 }
 
 static bool scan_comment(TSLexer *lexer, bool mark_end) {
@@ -241,11 +346,173 @@ static inline int32_t ascii_upper(int32_t character) {
     return character >= 'a' && character <= 'z' ? character - 'a' + 'A' : character;
 }
 
+static bool is_html_whitespace(int32_t character);
+static bool is_raw_name_boundary(TSLexer *lexer);
+static bool scan_processing_instruction_target(TSLexer *lexer);
+typedef enum { ELEMENT_TEXT_NONE, ELEMENT_TEXT_RAW, ELEMENT_TEXT_RCDATA, ELEMENT_TEXT_PLAINTEXT } ElementTextMode;
+
+static ElementTextMode element_text_mode(Scanner *scanner);
+static ElementTextMode classify_element_text(const Tag *tag);
+static bool in_html_namespace(const Scanner *scanner);
+
+static bool scan_processing_instruction(TSLexer *lexer, const bool *valid_symbols) {
+    if (!valid_symbols[PROCESSING_INSTRUCTION]) {
+        return false;
+    }
+    advance(lexer);
+    if (lexer->eof(lexer)) {
+        return false;
+    }
+    bool valid = scan_processing_instruction_target(lexer);
+    while (!lexer->eof(lexer) && lexer->lookahead != '>') {
+        advance(lexer);
+    }
+    enum TokenType result = valid ? (lexer->eof(lexer) ? UNFINISHED_PROCESSING_INSTRUCTION : PROCESSING_INSTRUCTION) : COMMENT;
+    if (!valid_symbols[result]) {
+        return false;
+    }
+    if (!lexer->eof(lexer)) {
+        advance(lexer);
+    }
+    lexer->mark_end(lexer);
+    lexer->result_symbol = result;
+    return true;
+}
+
+static ElementTextMode element_text_mode(Scanner *scanner) {
+    const Tag *tag = top_tag(scanner);
+    ElementTextMode mode = tag ? classify_element_text(tag) : ELEMENT_TEXT_NONE;
+    return mode != ELEMENT_TEXT_NONE && in_html_namespace(scanner) ? mode : ELEMENT_TEXT_NONE;
+}
+
+static ElementTextMode classify_element_text(const Tag *tag) {
+    if (tag->type == TEXTAREA || tag->type == TITLE) return ELEMENT_TEXT_RCDATA;
+    if (tag->type == IFRAME) return ELEMENT_TEXT_RAW;
+    if (tag->type != CUSTOM) return ELEMENT_TEXT_NONE;
+    static const struct { const char *name; ElementTextMode mode; } tags[] = {
+        {"XMP", ELEMENT_TEXT_RAW}, {"NOEMBED", ELEMENT_TEXT_RAW},
+        {"NOFRAMES", ELEMENT_TEXT_RAW}, {"PLAINTEXT", ELEMENT_TEXT_PLAINTEXT},
+    };
+    for (unsigned i = 0; i < sizeof(tags) / sizeof(tags[0]); i++) {
+        size_t length = strlen(tags[i].name);
+        if (tag->custom_tag_name.size == length && memcmp(tag->custom_tag_name.contents, tags[i].name, length) == 0) {
+            return tags[i].mode;
+        }
+    }
+    return ELEMENT_TEXT_NONE;
+}
+
+static bool in_html_namespace(const Scanner *scanner) {
+    Namespace current = scanner->omitted_namespace;
+    for (unsigned i = 0; i < scanner->tags.size; i++) {
+        const TagRun *run = &scanner->tags.contents[i];
+        if (current == NAMESPACE_HTML) {
+            if (run->tag.type == SVG) current = NAMESPACE_SVG;
+            if (run->tag.type == MATH) current = NAMESPACE_MATH;
+        }
+        if (i + 1 == scanner->tags.size && run->count == 1) {
+            return current == NAMESPACE_HTML;
+        }
+        current = child_namespace(current, &run->tag);
+    }
+    return current == NAMESPACE_HTML;
+}
+
+static Namespace namespace_after_tag(Namespace current, const Tag *tag) {
+    if (current == NAMESPACE_HTML) {
+        if (tag->type == SVG) current = NAMESPACE_SVG;
+        if (tag->type == MATH) current = NAMESPACE_MATH;
+    }
+    return child_namespace(current, tag);
+}
+
+static Namespace child_namespace(Namespace current, const Tag *tag) {
+    if (current == NAMESPACE_SVG && tag->type == TITLE) {
+        return NAMESPACE_HTML;
+    }
+    if (tag->type != CUSTOM) {
+        return current;
+    }
+    static const char *svg_points[] = {"FOREIGNOBJECT", "DESC"};
+    static const char *math_points[] = {"MI", "MO", "MN", "MS", "MTEXT"};
+    const char **points = current == NAMESPACE_SVG ? svg_points : math_points;
+    unsigned count = current == NAMESPACE_SVG ? 2 : 5;
+    for (unsigned i = 0; i < count; i++) {
+        size_t length = strlen(points[i]);
+        if (tag->custom_tag_name.size == length && memcmp(tag->custom_tag_name.contents, points[i], length) == 0) {
+            return NAMESPACE_HTML;
+        }
+    }
+    return current;
+}
+
+static bool scan_processing_instruction_target(TSLexer *lexer) {
+    char target[16] = {0};
+    unsigned length = 0;
+    int32_t first = ascii_upper(lexer->lookahead);
+    bool valid = (first >= 'A' && first <= 'Z') || first == '_';
+    while (!lexer->eof(lexer) && lexer->lookahead != '>' && lexer->lookahead != '?' &&
+           !is_html_whitespace(lexer->lookahead)) {
+        int32_t character = ascii_upper(lexer->lookahead);
+        valid &= (character >= 'A' && character <= 'Z') ||
+                 (character >= '0' && character <= '9') || character == '-' || character == '_';
+        if (length < sizeof(target) - 1) {
+            target[length++] = (char)character;
+        }
+        advance(lexer);
+    }
+    return valid && (lexer->eof(lexer) || (strcmp(target, "XML") != 0 && strcmp(target, "XML-STYLESHEET") != 0));
+}
+
+static bool scan_element_end(TSLexer *lexer, const Tag *tag);
+static bool scan_raw_name(TSLexer *lexer, const char *name, unsigned length);
+
+static bool scan_element_text(Scanner *scanner, TSLexer *lexer, ElementTextMode mode, bool can_end) {
+    const Tag *tag = top_tag(scanner);
+    bool consumed = false;
+    lexer->mark_end(lexer);
+    while (!lexer->eof(lexer) && !(mode == ELEMENT_TEXT_RCDATA && lexer->lookahead == '&')) {
+        if (lexer->lookahead == '<' && mode != ELEMENT_TEXT_PLAINTEXT) {
+            if (scan_element_end(lexer, tag)) {
+                if (!consumed && can_end && !accepts_tag_suffix(lexer, true)) {
+                    pop_tag(scanner);
+                    lexer->result_symbol = IMPLICIT_END_TAG;
+                    return true;
+                }
+                break;
+            }
+        } else {
+            advance(lexer);
+        }
+        consumed = true;
+        lexer->mark_end(lexer);
+    }
+    lexer->result_symbol = ELEMENT_TEXT;
+    return consumed;
+}
+
+static bool scan_element_end(TSLexer *lexer, const Tag *tag) {
+    advance(lexer);
+    if (lexer->lookahead != '/') return false;
+    advance(lexer);
+    const char *name = tag->custom_tag_name.contents;
+    unsigned length = tag->custom_tag_name.size;
+    if (tag->type != CUSTOM) {
+        for (unsigned i = 0; i < sizeof(TAG_TYPES_BY_TAG_NAME) / sizeof(TAG_TYPES_BY_TAG_NAME[0]); i++) {
+            const TagMapEntry *entry = &TAG_TYPES_BY_TAG_NAME[i];
+            if (entry->tag_type == tag->type) {
+                name = entry->tag_name;
+                length = strlen(name);
+                break;
+            }
+        }
+    }
+    return scan_raw_name(lexer, name, length) && (is_raw_name_boundary(lexer) || lexer->eof(lexer));
+}
+
 typedef enum { RAW_TEXT_NORMAL, RAW_TEXT_ESCAPED, RAW_TEXT_DOUBLE_ESCAPED } RawTextMode;
 
 static bool scan_raw_less_than(TSLexer *lexer, bool script, RawTextMode *mode);
-static bool scan_raw_name(TSLexer *lexer, const char *name);
-static bool is_raw_name_boundary(TSLexer *lexer);
 
 static bool scan_raw_text(Scanner *scanner, TSLexer *lexer) {
     if (scanner->tags.size == 0) {
@@ -290,7 +557,8 @@ static bool scan_raw_less_than(TSLexer *lexer, bool script, RawTextMode *mode) {
     advance(lexer);
     if (lexer->lookahead == '/') {
         advance(lexer);
-        if (!scan_raw_name(lexer, script ? "SCRIPT" : "STYLE") ||
+        const char *name = script ? "SCRIPT" : "STYLE";
+        if (!scan_raw_name(lexer, name, strlen(name)) ||
             !(is_raw_name_boundary(lexer) || lexer->eof(lexer))) {
             return false;
         }
@@ -302,17 +570,17 @@ static bool scan_raw_less_than(TSLexer *lexer, bool script, RawTextMode *mode) {
     }
     if (script && *mode == RAW_TEXT_NORMAL && lexer->lookahead == '!') {
         advance(lexer);
-        if (scan_raw_name(lexer, "--")) {
+        if (scan_raw_name(lexer, "--", 2)) {
             *mode = RAW_TEXT_ESCAPED;
         }
-    } else if (*mode == RAW_TEXT_ESCAPED && scan_raw_name(lexer, "SCRIPT") && is_raw_name_boundary(lexer)) {
+    } else if (*mode == RAW_TEXT_ESCAPED && scan_raw_name(lexer, "SCRIPT", 6) && is_raw_name_boundary(lexer)) {
         *mode = RAW_TEXT_DOUBLE_ESCAPED;
     }
     return false;
 }
 
-static bool scan_raw_name(TSLexer *lexer, const char *name) {
-    for (unsigned i = 0; name[i]; i++) {
+static bool scan_raw_name(TSLexer *lexer, const char *name, unsigned length) {
+    for (unsigned i = 0; i < length; i++) {
         if (ascii_upper(lexer->lookahead) != name[i]) {
             return false;
         }
@@ -322,9 +590,11 @@ static bool scan_raw_name(TSLexer *lexer, const char *name) {
 }
 
 static bool is_raw_name_boundary(TSLexer *lexer) {
-    return lexer->lookahead == '>' || lexer->lookahead == '/' || lexer->lookahead == ' ' ||
-           lexer->lookahead == '\t' || lexer->lookahead == '\n' || lexer->lookahead == '\r' ||
-           lexer->lookahead == '\f';
+    return lexer->lookahead == '>' || lexer->lookahead == '/' || is_html_whitespace(lexer->lookahead);
+}
+
+static bool is_html_whitespace(int32_t character) {
+    return character == ' ' || character == '\t' || character == '\n' || character == '\r' || character == '\f';
 }
 
 static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
@@ -367,7 +637,7 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
         }
 
         for (unsigned i = scanner->tags.size; i > 0; i--) {
-            if (scanner->tags.contents[i - 1].tag.type == next_tag.type) {
+            if (tag_eq(&scanner->tags.contents[i - 1].tag, &next_tag)) {
                 pop_tag(scanner);
                 lexer->result_symbol = IMPLICIT_END_TAG;
                 tag_free(&next_tag);
@@ -481,19 +751,8 @@ static bool scan_comment_or_void_end(Scanner *scanner, TSLexer *lexer, bool clos
     return true;
 }
 
-static bool scan_markup_open(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols, bool close_void) {
-    lexer->mark_end(lexer);
-    advance(lexer);
-    if (valid_symbols[COMMENT] && lexer->lookahead == '!') {
-        return scan_comment_or_void_end(scanner, lexer, close_void);
-    }
-    if (close_void && lexer->lookahead != '/') {
-        pop_tag(scanner);
-        lexer->result_symbol = IMPLICIT_END_TAG;
-        return true;
-    }
-    return valid_symbols[IMPLICIT_END_TAG] && scan_implicit_end_tag(scanner, lexer);
-}
+static bool scan_tag_syntax(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols);
+static bool scan_markup_open(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols, bool close_void);
 
 static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     if (valid_symbols[IMPLICIT_END_TAG] && lexer->eof(lexer) &&
@@ -503,8 +762,14 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return true;
     }
 
-    if (valid_symbols[RAW_TEXT] && !valid_symbols[START_TAG_NAME] && !valid_symbols[END_TAG_NAME]) {
+    bool in_content = !valid_symbols[START_TAG_NAME] && !valid_symbols[END_TAG_NAME];
+    if (valid_symbols[RAW_TEXT] && in_content) {
         return scan_raw_text(scanner, lexer);
+    }
+
+    ElementTextMode mode;
+    if (valid_symbols[ELEMENT_TEXT] && in_content && (mode = element_text_mode(scanner)) != ELEMENT_TEXT_NONE) {
+        return scan_element_text(scanner, lexer, mode, valid_symbols[IMPLICIT_END_TAG]);
     }
 
     if (scan_contiguous_attribute_content(lexer, valid_symbols)) {
@@ -515,6 +780,10 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return false;
     }
 
+    return scan_tag_syntax(scanner, lexer, valid_symbols);
+}
+
+static bool scan_tag_syntax(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     bool close_void = valid_symbols[IMPLICIT_END_TAG] && !valid_symbols[SELF_CLOSING_TAG_DELIMITER] &&
                       scanner->tags.size > 0 && tag_is_void(top_tag(scanner));
     bool valid_tag_name = valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME] ||
@@ -563,6 +832,23 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     return false;
 }
 
+static bool scan_markup_open(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols, bool close_void) {
+    lexer->mark_end(lexer);
+    advance(lexer);
+    if (valid_symbols[COMMENT] && lexer->lookahead == '!') {
+        return scan_comment_or_void_end(scanner, lexer, close_void);
+    }
+    if (close_void && lexer->lookahead != '/') {
+        pop_tag(scanner);
+        lexer->result_symbol = IMPLICIT_END_TAG;
+        return true;
+    }
+    if (lexer->lookahead == '?') {
+        return scan_processing_instruction(lexer, valid_symbols);
+    }
+    return valid_symbols[IMPLICIT_END_TAG] && scan_implicit_end_tag(scanner, lexer);
+}
+
 static bool close_void_element(Scanner *scanner, TSLexer *lexer) {
     lexer->mark_end(lexer);
     pop_tag(scanner);
@@ -608,6 +894,7 @@ static bool accepts_tag_suffix(TSLexer *lexer, bool closing) {
     int32_t previous = 0;
     bool value_start = false;
     bool attribute_component = false;
+    bool unseparated_attribute_syntax = false;
     while (!lexer->eof(lexer)) {
         if (quote) {
             if (lexer->lookahead == quote) {
@@ -620,16 +907,18 @@ static bool accepts_tag_suffix(TSLexer *lexer, bool closing) {
         } else if (lexer->lookahead == '>') {
             return !closing || previous != '/';
         } else if (lexer->lookahead == '<') {
-            return !closing && (attribute_component || value_start);
+            return !closing && (attribute_component || value_start || unseparated_attribute_syntax);
         } else if (lexer->lookahead == '=') {
             value_start = true;
             attribute_component = false;
+            unseparated_attribute_syntax = !has_attribute_separator;
         } else if (iswspace(lexer->lookahead)) {
             has_attribute_separator = true;
             attribute_component = false;
         } else {
+            attribute_component = has_attribute_separator || attribute_component || value_start ||
+                                  (lexer->lookahead != '/' && lexer->lookahead != '&');
             value_start = false;
-            attribute_component = has_attribute_separator;
         }
         previous = lexer->lookahead;
         advance(lexer);
