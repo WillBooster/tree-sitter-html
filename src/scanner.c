@@ -38,6 +38,7 @@ static bool scan_contiguous_attribute_content(TSLexer *lexer, const bool *valid_
 static bool scan_unquoted_attribute_fragment(TSLexer *lexer);
 static bool is_unquoted_attribute_content(int32_t character);
 static bool is_attribute_whitespace(int32_t character);
+static bool has_end_tag_terminator(TSLexer *lexer);
 
 static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
 
@@ -329,6 +330,10 @@ static bool is_raw_name_boundary(TSLexer *lexer) {
 static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     Tag *parent = top_tag(scanner);
 
+    if (parent && parent->type == STYLE && lexer->eof(lexer)) {
+        return false;
+    }
+
     bool is_closing_tag = false;
     if (lexer->lookahead == '/') {
         is_closing_tag = true;
@@ -351,8 +356,14 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
 
     if (is_closing_tag) {
         if (parent && tag_eq(parent, &next_tag)) {
+            bool close_raw = (parent->type == SCRIPT || parent->type == STYLE) &&
+                             !has_end_tag_terminator(lexer);
             tag_free(&next_tag);
-            return false;
+            if (close_raw) {
+                pop_tag(scanner);
+                lexer->result_symbol = IMPLICIT_END_TAG;
+            }
+            return close_raw;
         }
 
         for (unsigned i = scanner->tags.size; i > 0; i--) {
@@ -412,12 +423,19 @@ static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer, bool valid_end_t
     }
 
     lexer->mark_end(lexer);
-    while (iswspace(lexer->lookahead)) {
-        advance(lexer);
-    }
-    if (lexer->lookahead != '>' && !(valid_end_tag && (lexer->eof(lexer) || lexer->lookahead == '&'))) {
-        array_delete(&tag_name);
-        return false;
+    if (valid_end_tag) {
+        if (!has_end_tag_terminator(lexer)) {
+            array_delete(&tag_name);
+            return false;
+        }
+    } else {
+        while (iswspace(lexer->lookahead)) {
+            advance(lexer);
+        }
+        if (lexer->lookahead != '>') {
+            array_delete(&tag_name);
+            return false;
+        }
     }
 
     Tag tag = tag_for_name(tag_name);
@@ -569,6 +587,34 @@ static bool is_unquoted_attribute_content(int32_t character) {
     return !is_attribute_whitespace(character) &&
            character != '<' && character != '>' && character != '"' && character != '\'' &&
            character != '=' && character != '&';
+}
+
+static bool has_end_tag_terminator(TSLexer *lexer) {
+    while (iswspace(lexer->lookahead)) {
+        advance(lexer);
+    }
+    if (lexer->lookahead == '>' || lexer->lookahead == '&' || lexer->eof(lexer)) {
+        return true;
+    }
+    if (lexer->lookahead == '/') {
+        return false;
+    }
+    int32_t quote = 0;
+    while (!lexer->eof(lexer)) {
+        if (quote) {
+            if (lexer->lookahead == quote) {
+                quote = 0;
+            }
+        } else if (lexer->lookahead == '\'' || lexer->lookahead == '"') {
+            quote = lexer->lookahead;
+        } else if (lexer->lookahead == '>') {
+            return true;
+        } else if (lexer->lookahead == '<') {
+            return false;
+        }
+        advance(lexer);
+    }
+    return false;
 }
 
 static bool is_attribute_whitespace(int32_t character) {

@@ -1,5 +1,6 @@
+import fs from 'node:fs';
 import path from 'node:path';
-import { Edit, Language, Parser } from '@willbooster/web-tree-sitter';
+import { Edit, Language, Parser, Query } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 await Parser.init();
@@ -60,6 +61,92 @@ test('preserves following element ranges through an incremental malformed-close 
     }
   } finally {
     previous.delete();
+    parser.delete();
+  }
+});
+
+test('retains raw-text elements and their content through malformed closes', () => {
+  const parser = new Parser().setLanguage(language);
+  const injections = new Query(
+    language,
+    fs.readFileSync(path.join(import.meta.dirname, '../../queries/injections.scm'), 'utf8')
+  );
+  try {
+    for (const tag of ['script', 'style']) {
+      for (const close of [`</${tag}/>`, `</${tag} foo>`, `</${tag} ordinary`]) {
+        const source = `<${tag}>body & text${close}<p>after</p>`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(true);
+          const element = tree.rootNode.descendantsOfType(`${tag}_element`)[0];
+          expect(
+            element?.descendantsOfType('raw_text').map((node) => node.text),
+            source
+          ).toEqual(['body & text']);
+          expect(
+            injections
+              .captures(tree.rootNode)
+              .some(({ name, node }) => name === 'injection.content' && node.text === 'body & text'),
+            source
+          ).toBe(true);
+          expect(tree.rootNode.lastNamedChild?.text, source).toBe('<p>after</p>');
+        } finally {
+          tree.delete();
+        }
+      }
+    }
+  } finally {
+    injections.delete();
+    parser.delete();
+  }
+});
+
+test('retains sibling ownership after closing tags with ignored attributes', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const close of ['</div foo>', '</div class="a">', '</div class="<value>">']) {
+      const source = `<section><div>x${close}<p>after</p></section>`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(true);
+        const section = tree.rootNode.descendantsOfType('element').find((node) => node.text === source)!;
+        const siblings = section.namedChildren.filter((node) => node.type === 'element');
+        expect(siblings, source).toHaveLength(2);
+        expect(siblings[0]?.text.startsWith('<div>x'), source).toBe(true);
+        expect(
+          siblings[0]?.namedChildren
+            .find((node) => node.type === 'end_tag')
+            ?.descendantsOfType('tag_name')
+            .map((node) => node.text),
+          source
+        ).toEqual(['div']);
+        expect(siblings[1]?.text, source).toBe('<p>after</p>');
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});
+
+test('requires a closing style tag at EOF after recovering a malformed close', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const source of ['<style>body', '<style></style&amp;><p>after</p>']) {
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(true);
+        expect(
+          tree.rootNode.descendantsOfType('raw_text').map((node) => node.text),
+          source
+        ).toEqual([source.slice('<style>'.length)]);
+        expect(tree.rootNode.descendantsOfType('element'), source).toHaveLength(0);
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
     parser.delete();
   }
 });
