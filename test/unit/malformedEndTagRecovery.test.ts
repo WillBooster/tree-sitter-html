@@ -12,6 +12,9 @@ test('retains following elements while reporting malformed closing tags', () => 
     for (const source of [
       '<div>x</div ordinary<p>after</p>',
       '<div>x</div/><p>after</p>',
+      '<div>x</div class="a"/><p>after</p>',
+      '<div>x</div x/><p>after</p>',
+      '<textarea>x</textarea a=b/><p>after</p>',
       '<script>x</script/><p>after</p>',
     ]) {
       const tree = parser.parse(source)!;
@@ -73,7 +76,13 @@ test('retains raw-text elements and their content through malformed closes', () 
   );
   try {
     for (const tag of ['script', 'style']) {
-      for (const close of [`</${tag}/>`, `</${tag} foo>`, `</${tag} ordinary`]) {
+      for (const close of [
+        `</${tag}/>`,
+        `</${tag} foo>`,
+        `</${tag} foo/>`,
+        `</${tag} class="a"/>`,
+        `</${tag} ordinary`,
+      ]) {
         const source = `<section><${tag}>body & text${close}<p>after</p></section>`;
         const tree = parser.parse(source)!;
         try {

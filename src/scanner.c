@@ -601,6 +601,7 @@ static bool has_end_tag_terminator(TSLexer *lexer) {
         return false;
     }
     int32_t quote = 0;
+    int32_t previous = 0;
     bool value_start = false;
     while (!lexer->eof(lexer)) {
         if (quote) {
@@ -611,7 +612,7 @@ static bool has_end_tag_terminator(TSLexer *lexer) {
             quote = lexer->lookahead;
             value_start = false;
         } else if (lexer->lookahead == '>') {
-            return true;
+            return previous != '/';
         } else if (lexer->lookahead == '<') {
             return false;
         } else if (lexer->lookahead == '=') {
@@ -619,6 +620,7 @@ static bool has_end_tag_terminator(TSLexer *lexer) {
         } else if (!iswspace(lexer->lookahead)) {
             value_start = false;
         }
+        previous = lexer->lookahead;
         advance(lexer);
     }
     return false;
