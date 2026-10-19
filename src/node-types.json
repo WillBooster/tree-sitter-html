@@ -25,7 +25,17 @@
   {
     "type": "doctype",
     "named": true,
-    "fields": {}
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "doctype_value",
+          "named": true
+        }
+      ]
+    }
   },
   {
     "type": "document",
@@ -295,6 +305,10 @@
   {
     "type": "doctype",
     "named": false
+  },
+  {
+    "type": "doctype_value",
+    "named": true
   },
   {
     "type": "entity",

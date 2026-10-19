@@ -23,9 +23,9 @@
 
 enum ts_symbol_identifiers {
   anon_sym_LT_BANG = 1,
-  aux_sym_doctype_token1 = 2,
-  anon_sym_GT = 3,
-  sym__doctype = 4,
+  anon_sym_GT = 2,
+  sym__doctype = 3,
+  sym_doctype_value = 4,
   anon_sym_LT = 5,
   anon_sym_SLASH_GT = 6,
   anon_sym_LT_SLASH = 7,
@@ -67,9 +67,9 @@ enum ts_symbol_identifiers {
 static const char * const ts_symbol_names[] = {
   [ts_builtin_sym_end] = "end",
   [anon_sym_LT_BANG] = "<!",
-  [aux_sym_doctype_token1] = "doctype_token1",
   [anon_sym_GT] = ">",
   [sym__doctype] = "doctype",
+  [sym_doctype_value] = "doctype_value",
   [anon_sym_LT] = "<",
   [anon_sym_SLASH_GT] = "/>",
   [anon_sym_LT_SLASH] = "</",
@@ -111,9 +111,9 @@ static const char * const ts_symbol_names[] = {
 static const TSSymbol ts_symbol_map[] = {
   [ts_builtin_sym_end] = ts_builtin_sym_end,
   [anon_sym_LT_BANG] = anon_sym_LT_BANG,
-  [aux_sym_doctype_token1] = aux_sym_doctype_token1,
   [anon_sym_GT] = anon_sym_GT,
   [sym__doctype] = sym__doctype,
+  [sym_doctype_value] = sym_doctype_value,
   [anon_sym_LT] = anon_sym_LT,
   [anon_sym_SLASH_GT] = anon_sym_SLASH_GT,
   [anon_sym_LT_SLASH] = anon_sym_LT_SLASH,
@@ -161,10 +161,6 @@ static const TSSymbolMetadata ts_symbol_metadata[] = {
     .visible = true,
     .named = false,
   },
-  [aux_sym_doctype_token1] = {
-    .visible = false,
-    .named = false,
-  },
   [anon_sym_GT] = {
     .visible = true,
     .named = false,
@@ -172,6 +168,10 @@ static const TSSymbolMetadata ts_symbol_metadata[] = {
   [sym__doctype] = {
     .visible = true,
     .named = false,
+  },
+  [sym_doctype_value] = {
+    .visible = true,
+    .named = true,
   },
   [anon_sym_LT] = {
     .visible = true,
@@ -435,7 +435,7 @@ static const uint16_t ts_lex_advance_map_0[] = {
   '/', 8,
   '<', 24,
   '=', 27,
-  '>', 22,
+  '>', 20,
   'D', 11,
   'd', 11,
 };
@@ -498,7 +498,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
       ts_lex_state_2:
       if (lookahead == '/') ADVANCE(8);
       if (lookahead == '=') ADVANCE(27);
-      if (lookahead == '>') ADVANCE(22);
+      if (lookahead == '>') ADVANCE(20);
       if (('\t' <= lookahead && lookahead <= '\r') ||
           lookahead == ' ') TS_LEX_REPEAT(true, ts_lex_state_2);
       if (!eof &&
@@ -523,9 +523,9 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
       END_STATE();
     case 5:
       if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') ADVANCE(20);
+          lookahead == ' ') ADVANCE(22);
       if (!eof &&
-          lookahead != '>') ADVANCE(21);
+          lookahead != '>') ADVANCE(23);
       END_STATE();
     case 6:
       if (lookahead == '#') ADVANCE(14);
@@ -547,7 +547,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
       END_STATE();
     case 10:
       if (lookahead == 'E' ||
-          lookahead == 'e') ADVANCE(23);
+          lookahead == 'e') ADVANCE(21);
       END_STATE();
     case 11:
       if (lookahead == 'O' ||
@@ -590,24 +590,24 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
       ACCEPT_TOKEN(anon_sym_LT_BANG);
       END_STATE();
     case 20:
-      ts_lex_state_20:
-      ACCEPT_TOKEN(aux_sym_doctype_token1);
-      if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') TS_LEX_REPEAT(false, ts_lex_state_20);
-      if (!eof &&
-          lookahead != '>') ADVANCE(21);
-      END_STATE();
-    case 21:
-      ts_lex_state_21:
-      if (!eof &&
-          lookahead != '>') TS_LEX_REPEAT(false, ts_lex_state_21);
-      ACCEPT_TOKEN(aux_sym_doctype_token1);
-      END_STATE();
-    case 22:
       ACCEPT_TOKEN(anon_sym_GT);
       END_STATE();
-    case 23:
+    case 21:
       ACCEPT_TOKEN(sym__doctype);
+      END_STATE();
+    case 22:
+      ts_lex_state_22:
+      ACCEPT_TOKEN(sym_doctype_value);
+      if (('\t' <= lookahead && lookahead <= '\r') ||
+          lookahead == ' ') TS_LEX_REPEAT(false, ts_lex_state_22);
+      if (!eof &&
+          lookahead != '>') ADVANCE(23);
+      END_STATE();
+    case 23:
+      ts_lex_state_23:
+      if (!eof &&
+          lookahead != '>') TS_LEX_REPEAT(false, ts_lex_state_23);
+      ACCEPT_TOKEN(sym_doctype_value);
       END_STATE();
     case 24:
       ACCEPT_TOKEN(anon_sym_LT);
@@ -1338,7 +1338,7 @@ static const uint16_t ts_small_parse_table[] = {
     sym_attribute, STATE(65535),
     aux_sym_start_tag_repeat1, STATE(65535),
   [493] = 2,
-    aux_sym_doctype_token1, ACTIONS(202),
+    sym_doctype_value, ACTIONS(202),
     sym_comment, ACTIONS(3),
   [498] = 2,
     anon_sym_GT, ACTIONS(204),
@@ -1404,11 +1404,11 @@ static const uint16_t ts_small_parse_table[] = {
   [693] =
 21504, 0, 256, 3, 64, 4, 228, 230, 232, 3, 79,     
   [704] =
-520, 0, 256, 2, 288, 3, 234, 161, 3, 70, 70,     
+516, 0, 256, 2, 288, 3, 234, 161, 3, 70, 70,     
   [715] =
-520, 0, 256, 2, 288, 3, 236, 161, 3, 70, 70,     
+516, 0, 256, 2, 288, 3, 236, 161, 3, 70, 70,     
   [726] =
-520, 0, 256, 2, 288, 3, 197, 238, 3, 65535, 65535,     
+516, 0, 256, 2, 288, 3, 197, 238, 3, 65535, 65535,     
   [737] =
 128, 0, 448, 1, 8, 4, 241, 243, 245, 3, 58,     
   [748] = 4,
@@ -1484,7 +1484,7 @@ static const uint16_t ts_small_parse_table[] = {
     sym_erroneous_end_tag_name, ACTIONS(117),
     sym_comment, ACTIONS(3),
   [874] = 2,
-    aux_sym_doctype_token1, ACTIONS(271),
+    sym_doctype_value, ACTIONS(271),
     sym_comment, ACTIONS(3),
   [879] = 2,
     anon_sym_GT, ACTIONS(273),
