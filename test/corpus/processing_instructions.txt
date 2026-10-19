@@ -5,7 +5,9 @@ Processing instruction with data
 
 ---
 
-(document (processing_instruction))
+(document
+  (processing_instruction)
+  (text))
 
 ==================
 Instructions close void elements
@@ -20,7 +22,8 @@ Instructions close void elements
     (element (start_tag (tag_name)))
     (processing_instruction)
     (element (start_tag (tag_name)) (text) (end_tag (tag_name)))
-    (end_tag (tag_name))))
+    (end_tag (tag_name)))
+  (text))
 
 ==================
 Reserved targets become comments
@@ -31,7 +34,8 @@ Reserved targets become comments
 
 (document
   (comment)
-  (element (start_tag (tag_name)) (text) (end_tag (tag_name))))
+  (element (start_tag (tag_name)) (text) (end_tag (tag_name)))
+  (text))
 
 ==================
 Instruction-like RCDATA retains entities and closing tags
@@ -47,7 +51,8 @@ Instruction-like RCDATA retains entities and closing tags
     (entity)
     (text)
     (end_tag (tag_name)))
-  (element (start_tag (tag_name)) (text) (end_tag (tag_name))))
+  (element (start_tag (tag_name)) (text) (end_tag (tag_name)))
+  (text))
 
 ==================
 Instruction-like raw content retains entity spelling
@@ -60,4 +65,5 @@ Instruction-like raw content retains entity spelling
   (element
     (start_tag (tag_name))
     (text)
-    (end_tag (tag_name))))
+    (end_tag (tag_name)))
+  (text))

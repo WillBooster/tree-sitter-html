@@ -683,6 +683,9 @@ static bool scan_comment_or_void_end(Scanner *scanner, TSLexer *lexer, bool clos
     return true;
 }
 
+static bool close_void_element(Scanner *scanner, TSLexer *lexer);
+static bool scan_markup_open(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols, bool close_void);
+
 static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     if (valid_symbols[IMPLICIT_END_TAG] && lexer->eof(lexer) &&
         top_tag(scanner) && top_tag(scanner)->type == SCRIPT) {
@@ -701,39 +704,27 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return scan_element_text(lexer, top_tag(scanner), mode);
     }
 
+    bool close_void = valid_symbols[IMPLICIT_END_TAG] && !valid_symbols[SELF_CLOSING_TAG_DELIMITER] &&
+                      scanner->tags.size > 0 && tag_is_void(top_tag(scanner));
+    bool valid_tag_name = valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME] ||
+                          valid_symbols[ERRONEOUS_END_TAG_NAME];
+    bool in_tag = valid_tag_name || valid_symbols[SELF_CLOSING_TAG_DELIMITER];
+    if (iswspace(lexer->lookahead) && !in_tag) {
+        return close_void && close_void_element(scanner, lexer);
+    }
+
     while (iswspace(lexer->lookahead)) {
         skip(lexer);
     }
 
-    bool close_void = valid_symbols[IMPLICIT_END_TAG] && !valid_symbols[SELF_CLOSING_TAG_DELIMITER] &&
-                      scanner->tags.size > 0 && tag_is_void(top_tag(scanner));
     if (close_void && lexer->lookahead != '<') {
-        lexer->mark_end(lexer);
-        pop_tag(scanner);
-        lexer->result_symbol = IMPLICIT_END_TAG;
-        return true;
+        return close_void_element(scanner, lexer);
     }
 
     switch (lexer->lookahead) {
         case '<':
-            lexer->mark_end(lexer);
-            advance(lexer);
+            return scan_markup_open(scanner, lexer, valid_symbols, close_void);
 
-            if (lexer->lookahead == '!') {
-                return scan_comment_or_void_end(scanner, lexer, close_void);
-            }
-
-            if (close_void && lexer->lookahead != '/') {
-                pop_tag(scanner);
-                lexer->result_symbol = IMPLICIT_END_TAG;
-                return true;
-            }
-
-            if (lexer->lookahead == '?') {
-                return scan_processing_instruction(lexer, valid_symbols);
-            }
-
-            // fall through
         case '\0':
             if (valid_symbols[IMPLICIT_END_TAG]) {
                 return scan_implicit_end_tag(scanner, lexer);
@@ -747,14 +738,36 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
             break;
 
         default:
-            if ((valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME] ||
-                 valid_symbols[ERRONEOUS_END_TAG_NAME]) && !valid_symbols[RAW_TEXT]) {
-                return valid_symbols[START_TAG_NAME] ? scan_start_tag_name(scanner, lexer)
-                                                     : scan_end_tag_name(scanner, lexer, valid_symbols[END_TAG_NAME]);
-            }
+            return valid_tag_name && !valid_symbols[RAW_TEXT] &&
+                   (valid_symbols[START_TAG_NAME] ? scan_start_tag_name(scanner, lexer)
+                                                 : scan_end_tag_name(scanner, lexer, valid_symbols[END_TAG_NAME]));
     }
 
     return false;
+}
+
+static bool scan_markup_open(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols, bool close_void) {
+    lexer->mark_end(lexer);
+    advance(lexer);
+    if (lexer->lookahead == '!') {
+        return scan_comment_or_void_end(scanner, lexer, close_void);
+    }
+    if (close_void && lexer->lookahead != '/') {
+        pop_tag(scanner);
+        lexer->result_symbol = IMPLICIT_END_TAG;
+        return true;
+    }
+    if (lexer->lookahead == '?') {
+        return scan_processing_instruction(lexer, valid_symbols);
+    }
+    return valid_symbols[IMPLICIT_END_TAG] && scan_implicit_end_tag(scanner, lexer);
+}
+
+static bool close_void_element(Scanner *scanner, TSLexer *lexer) {
+    lexer->mark_end(lexer);
+    pop_tag(scanner);
+    lexer->result_symbol = IMPLICIT_END_TAG;
+    return true;
 }
 
 void *tree_sitter_html_external_scanner_create() {
