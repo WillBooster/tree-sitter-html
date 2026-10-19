@@ -74,7 +74,7 @@ test('retains raw-text elements and their content through malformed closes', () 
   try {
     for (const tag of ['script', 'style']) {
       for (const close of [`</${tag}/>`, `</${tag} foo>`, `</${tag} ordinary`]) {
-        const source = `<${tag}>body & text${close}<p>after</p>`;
+        const source = `<section><${tag}>body & text${close}<p>after</p></section>`;
         const tree = parser.parse(source)!;
         try {
           expect(tree.rootNode.hasError, source).toBe(true);
@@ -89,7 +89,12 @@ test('retains raw-text elements and their content through malformed closes', () 
               .some(({ name, node }) => name === 'injection.content' && node.text === 'body & text'),
             source
           ).toBe(true);
-          expect(tree.rootNode.lastNamedChild?.text, source).toBe('<p>after</p>');
+          const section = tree.rootNode.firstNamedChild!;
+          expect(section.namedChildren.find((node) => node.type === 'end_tag')?.text, source).toBe('</section>');
+          expect(
+            section.namedChildren.filter((node) => node.type === 'element').map((node) => node.text),
+            source
+          ).toEqual(['<p>after</p>']);
         } finally {
           tree.delete();
         }
