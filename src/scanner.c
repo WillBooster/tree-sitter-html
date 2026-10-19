@@ -1,5 +1,6 @@
 #include "tag.h"
 #include "tree_sitter/parser.h"
+#include "attributeEntity.h"
 
 #include <wctype.h>
 
@@ -16,6 +17,10 @@ enum TokenType {
     PROCESSING_INSTRUCTION,
     ELEMENT_TEXT,
     UNFINISHED_PROCESSING_INSTRUCTION,
+    ATTRIBUTE_ENTITY,
+    UNQUOTED_ATTRIBUTE_ENTITY,
+    ATTRIBUTE_AMPERSAND,
+    UNQUOTED_ATTRIBUTE_FRAGMENT,
 };
 
 typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH } Namespace;
@@ -36,6 +41,12 @@ static Namespace namespace_after_tag(Namespace current, const Tag *tag);
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+
+static bool close_void_element(Scanner *scanner, TSLexer *lexer);
+static bool scan_contiguous_attribute_content(TSLexer *lexer, const bool *valid_symbols);
+static bool scan_unquoted_attribute_fragment(TSLexer *lexer);
+static bool is_unquoted_attribute_content(int32_t character);
+static bool is_attribute_whitespace(int32_t character);
 
 static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
 
@@ -710,7 +721,7 @@ static bool scan_comment_or_void_end(Scanner *scanner, TSLexer *lexer, bool clos
     return true;
 }
 
-static bool close_void_element(Scanner *scanner, TSLexer *lexer);
+static bool scan_tag_syntax(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols);
 static bool scan_markup_open(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols, bool close_void);
 
 static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
@@ -731,17 +742,33 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return scan_element_text(lexer, top_tag(scanner), mode);
     }
 
+    if (scan_contiguous_attribute_content(lexer, valid_symbols)) {
+        return true;
+    }
+
+    if (valid_symbols[ATTRIBUTE_ENTITY] && !valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY] && lexer->lookahead == '/') {
+        return false;
+    }
+
+    return scan_tag_syntax(scanner, lexer, valid_symbols);
+}
+
+static bool scan_tag_syntax(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     bool close_void = valid_symbols[IMPLICIT_END_TAG] && !valid_symbols[SELF_CLOSING_TAG_DELIMITER] &&
                       scanner->tags.size > 0 && tag_is_void(top_tag(scanner));
     bool valid_tag_name = valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME] ||
                           valid_symbols[ERRONEOUS_END_TAG_NAME];
-    bool in_tag = valid_tag_name || valid_symbols[SELF_CLOSING_TAG_DELIMITER];
+    bool in_tag = valid_tag_name || valid_symbols[SELF_CLOSING_TAG_DELIMITER] ||
+                  valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY];
     if (iswspace(lexer->lookahead) && !in_tag) {
         return close_void && close_void_element(scanner, lexer);
     }
 
-    while (iswspace(lexer->lookahead)) {
+    while (is_attribute_whitespace(lexer->lookahead)) {
         skip(lexer);
+    }
+    if (valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY] && !valid_symbols[START_TAG_NAME] && lexer->lookahead == '&') {
+        return scan_attribute_entity(lexer, UNQUOTED_ATTRIBUTE_ENTITY, ATTRIBUTE_AMPERSAND);
     }
 
     if (close_void && lexer->lookahead != '<') {
@@ -765,9 +792,10 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
             break;
 
         default:
-            return valid_tag_name && !valid_symbols[RAW_TEXT] &&
-                   (valid_symbols[START_TAG_NAME] ? scan_start_tag_name(scanner, lexer)
-                                                 : scan_end_tag_name(scanner, lexer, valid_symbols[END_TAG_NAME]));
+            if (valid_tag_name && !valid_symbols[RAW_TEXT]) {
+                return valid_symbols[START_TAG_NAME] ? scan_start_tag_name(scanner, lexer)
+                                                     : scan_end_tag_name(scanner, lexer, valid_symbols[END_TAG_NAME]);
+            }
     }
 
     return false;
@@ -776,7 +804,7 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
 static bool scan_markup_open(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols, bool close_void) {
     lexer->mark_end(lexer);
     advance(lexer);
-    if (lexer->lookahead == '!') {
+    if (valid_symbols[COMMENT] && lexer->lookahead == '!') {
         return scan_comment_or_void_end(scanner, lexer, close_void);
     }
     if (close_void && lexer->lookahead != '/') {
@@ -795,6 +823,36 @@ static bool close_void_element(Scanner *scanner, TSLexer *lexer) {
     pop_tag(scanner);
     lexer->result_symbol = IMPLICIT_END_TAG;
     return true;
+}
+
+static bool scan_contiguous_attribute_content(TSLexer *lexer, const bool *valid_symbols) {
+    if (valid_symbols[START_TAG_NAME] || lexer->eof(lexer)) {
+        return false;
+    }
+    if (valid_symbols[UNQUOTED_ATTRIBUTE_FRAGMENT] && is_unquoted_attribute_content(lexer->lookahead)) {
+        return scan_unquoted_attribute_fragment(lexer);
+    }
+    return valid_symbols[ATTRIBUTE_ENTITY] && lexer->lookahead == '&' &&
+           scan_attribute_entity(lexer, ATTRIBUTE_ENTITY, ATTRIBUTE_AMPERSAND);
+}
+
+static bool scan_unquoted_attribute_fragment(TSLexer *lexer) {
+    do {
+        advance(lexer);
+    } while (!lexer->eof(lexer) && is_unquoted_attribute_content(lexer->lookahead));
+    lexer->mark_end(lexer);
+    lexer->result_symbol = UNQUOTED_ATTRIBUTE_FRAGMENT;
+    return true;
+}
+
+static bool is_unquoted_attribute_content(int32_t character) {
+    return !is_attribute_whitespace(character) &&
+           character != '<' && character != '>' && character != '"' && character != '\'' &&
+           character != '=' && character != '&';
+}
+
+static bool is_attribute_whitespace(int32_t character) {
+    return (character >= '\t' && character <= '\r') || character == ' ';
 }
 
 void *tree_sitter_html_external_scanner_create() {
