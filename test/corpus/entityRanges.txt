@@ -1,0 +1,16 @@
+===================================
+Complete named and numeric entity ranges
+===================================
+<p>&frac12;&CounterClockwiseContourIntegral;&#128512;&#00000000065;&#x0000000041;</p><br>
+---
+
+(document
+  (element
+    (start_tag (tag_name))
+    (entity)
+    (entity)
+    (entity)
+    (entity)
+    (entity)
+    (end_tag (tag_name)))
+  (element (start_tag (tag_name))))

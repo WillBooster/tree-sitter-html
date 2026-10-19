@@ -126,8 +126,7 @@ module.exports = grammar({
 
     attribute_value: _ => /[^<>"'=\s]+/,
 
-    // HTML fixes the named-reference set: https://html.spec.whatwg.org/multipage/named-characters.html
-    entity: _ => /&(#([xX][0-9a-fA-F]{1,6}|[0-9]{1,5})|[A-Za-z]{1,30});?/,
+    entity: _ => /&(#([xX][0-9a-fA-F]+|[0-9]+)|[A-Za-z][A-Za-z0-9]*);?/,
 
     quoted_attribute_value: $ => choice(
       seq('\'', optional(alias(/[^']+/, $.attribute_value)), '\''),
