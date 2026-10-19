@@ -16,6 +16,7 @@ enum TokenType {
     COMMENT,
     ATTRIBUTE_ENTITY,
     UNQUOTED_ATTRIBUTE_ENTITY,
+    ATTRIBUTE_AMPERSAND,
 };
 
 typedef struct {
@@ -477,8 +478,8 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return scan_raw_text(scanner, lexer);
     }
 
-    if (valid_symbols[ATTRIBUTE_ENTITY] && lexer->lookahead == '&') {
-        return scan_attribute_entity(lexer, ATTRIBUTE_ENTITY);
+    if (valid_symbols[ATTRIBUTE_ENTITY] && !valid_symbols[START_TAG_NAME] && lexer->lookahead == '&') {
+        return scan_attribute_entity(lexer, ATTRIBUTE_ENTITY, ATTRIBUTE_AMPERSAND);
     }
 
     if (valid_symbols[ATTRIBUTE_ENTITY] && !valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY] && lexer->lookahead == '/') {
@@ -488,8 +489,8 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     while (iswspace(lexer->lookahead)) {
         skip(lexer);
     }
-    if (valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY] && lexer->lookahead == '&') {
-        return scan_attribute_entity(lexer, UNQUOTED_ATTRIBUTE_ENTITY);
+    if (valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY] && !valid_symbols[START_TAG_NAME] && lexer->lookahead == '&') {
+        return scan_attribute_entity(lexer, UNQUOTED_ATTRIBUTE_ENTITY, ATTRIBUTE_AMPERSAND);
     }
 
     bool close_void = valid_symbols[IMPLICIT_END_TAG] && !valid_symbols[SELF_CLOSING_TAG_DELIMITER] &&

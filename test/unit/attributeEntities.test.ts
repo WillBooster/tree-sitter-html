@@ -171,6 +171,28 @@ test('keeps a contiguous slash in unquoted values and distinguishes separated se
   }
 });
 
+test('keeps following elements when an end-tag terminator is missing before a reference', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const gap of [' ', '\n', '\r\n']) {
+      for (const content of ['&nbsp;', '&amp;', '&copy']) {
+        const source = `<div>x</div${gap}${content}<p>after</p>`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(true);
+          expect(tree.rootNode.lastNamedChild?.type, source).toBe('element');
+          expect(tree.rootNode.lastNamedChild?.text, source).toBe('<p>after</p>');
+          expect(tree.rootNode.descendantsOfType('end_tag').at(-1)?.text).toBe('</p>');
+        } finally {
+          tree.delete();
+        }
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});
+
 test('incrementally updates an attribute reference without changing neighboring values', () => {
   const parser = new Parser().setLanguage(language);
   const source = '<a title="before &copy=1 after" other="keep&amp;me">body</a><p>after</p>';

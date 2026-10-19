@@ -401,7 +401,12 @@
               "value": "[^<>\"'=\\s&]+"
             },
             {
-              "type": "STRING",
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_attribute_ampersand"
+              },
+              "named": false,
               "value": "&"
             }
           ]
@@ -432,15 +437,13 @@
                 }
               },
               {
-                "type": "IMMEDIATE_TOKEN",
+                "type": "ALIAS",
                 "content": {
-                  "type": "PREC",
-                  "value": 1,
-                  "content": {
-                    "type": "STRING",
-                    "value": "&"
-                  }
-                }
+                  "type": "SYMBOL",
+                  "name": "_attribute_ampersand"
+                },
+                "named": false,
+                "value": "&"
               }
             ]
           }
@@ -488,11 +491,13 @@
                           }
                         },
                         {
-                          "type": "IMMEDIATE_TOKEN",
+                          "type": "ALIAS",
                           "content": {
-                            "type": "STRING",
-                            "value": "&"
-                          }
+                            "type": "SYMBOL",
+                            "name": "_attribute_ampersand"
+                          },
+                          "named": false,
+                          "value": "&"
                         }
                       ]
                     }
@@ -545,11 +550,13 @@
                           }
                         },
                         {
-                          "type": "IMMEDIATE_TOKEN",
+                          "type": "ALIAS",
                           "content": {
-                            "type": "STRING",
-                            "value": "&"
-                          }
+                            "type": "SYMBOL",
+                            "name": "_attribute_ampersand"
+                          },
+                          "named": false,
+                          "value": "&"
                         }
                       ]
                     }
@@ -627,6 +634,10 @@
     {
       "type": "SYMBOL",
       "name": "_unquoted_attribute_entity"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_attribute_ampersand"
     }
   ],
   "inline": [],

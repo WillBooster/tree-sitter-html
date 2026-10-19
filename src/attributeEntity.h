@@ -11,18 +11,18 @@ static bool scan_named_attribute_entity(TSLexer *lexer);
 static const HtmlEntityName *find_html_entity(const char *name);
 static bool html_entity_digit(int32_t character, bool hexadecimal);
 
-static bool scan_attribute_entity(TSLexer *lexer, TSSymbol symbol) {
+static bool scan_attribute_entity(TSLexer *lexer, TSSymbol symbol, TSSymbol ampersand) {
     lexer->advance(lexer, false);
+    lexer->mark_end(lexer);
     bool matched = lexer->lookahead == '#' ? scan_numeric_attribute_entity(lexer)
                                            : scan_named_attribute_entity(lexer);
-    if (!matched) {
-        return false;
-    }
-    if (lexer->lookahead == ';') {
+    if (matched && lexer->lookahead == ';') {
         lexer->advance(lexer, false);
     }
-    lexer->mark_end(lexer);
-    lexer->result_symbol = symbol;
+    if (matched) {
+        lexer->mark_end(lexer);
+    }
+    lexer->result_symbol = matched ? symbol : ampersand;
     return true;
 }
 
