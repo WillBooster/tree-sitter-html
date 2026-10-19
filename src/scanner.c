@@ -411,15 +411,13 @@ static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer, bool valid_end_t
         return false;
     }
 
-    if (!valid_end_tag) {
-        lexer->mark_end(lexer);
-        while (iswspace(lexer->lookahead)) {
-            advance(lexer);
-        }
-        if (lexer->lookahead != '>') {
-            array_delete(&tag_name);
-            return false;
-        }
+    lexer->mark_end(lexer);
+    while (iswspace(lexer->lookahead)) {
+        advance(lexer);
+    }
+    if (lexer->lookahead != '>' && !(valid_end_tag && (lexer->eof(lexer) || lexer->lookahead == '&'))) {
+        array_delete(&tag_name);
+        return false;
     }
 
     Tag tag = tag_for_name(tag_name);
