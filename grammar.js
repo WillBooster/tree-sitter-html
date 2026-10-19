@@ -37,11 +37,13 @@ module.exports = grammar({
     doctype: $ => seq(
       '<!',
       alias($._doctype, 'doctype'),
-      /[^>]+/,
+      $.doctype_value,
       '>',
     ),
 
     _doctype: _ => /[Dd][Oo][Cc][Tt][Yy][Pp][Ee]/,
+
+    doctype_value: _ => repeat1(/[^>]+/),
 
     _node: $ => choice(
       $.doctype,
