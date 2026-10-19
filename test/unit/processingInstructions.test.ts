@@ -237,6 +237,10 @@ test('preserves markup inside foreign title elements and HTML text inside integr
       ['<svg>', '</svg>'],
       ['<math>', '</math>'],
       ['<svg><foreignObject><svg>', '</svg></foreignObject></svg>'],
+      ['<svg><foreıgnObject>', '</foreıgnObject></svg>'],
+      ['<svg><foreŉgnObject>', '</foreŉgnObject></svg>'],
+      ['<math><mı>', '</mı></math>'],
+      ['<math><mſ>', '</mſ></math>'],
     ]) {
       const source = `${prefix}<title><!--label--><?target?>icon</title>${suffix}<p>after</p>`;
       const tree = parser.parse(source)!;
