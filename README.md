@@ -20,7 +20,11 @@ number, so it loads only with the WillBooster runtime, version 2.0.0 or later in
 it. Input that contains NUL characters can parse to a different tree than with upstream's 0.23.2 parser, because the
 lexers that generator emits treat a NUL character as an ordinary character. This grammar also accepts literal `>`
 characters and bare `&` in text nodes, which upstream 0.23.2 rejects. A bare `&` becomes its own `text` node beside
-surrounding text, while character references remain `entity` nodes. Processing instructions use source-preserving `processing_instruction` nodes and directive highlights. Instruction-looking content stays text in raw-text and RCDATA elements. Its scanner requires an HTML tag-name boundary after
+surrounding text, while character references remain `entity` nodes. Processing instructions use source-preserving
+`processing_instruction` nodes and directive highlights. In HTML-namespace `title` and `textarea`, tags, comments,
+and instructions stay `text`, while character references remain `entity` nodes. Content inside `iframe`, `xmp`,
+`noembed`, and `noframes` also stays `text` up to the element's own closing tag. `plaintext` retains all remaining
+input as `text`, including closing tags. Its scanner requires an HTML tag-name boundary after
 `</script` and `</style`, so longer names and overlapping prefixes remain raw text. Closing-name comparisons
 fold only ASCII letters, and embedded NUL characters remain part of raw-text content. Script content follows
 HTML escaped and double-escaped states, so closing-tag text inside a double escape remains raw text. A script that reaches
@@ -84,7 +88,7 @@ fuzzed with:
 ```toml
 [dependencies]
 tree-sitter = { package = "willbooster-tree-sitter", version = "2.0.0" }
-tree-sitter-html = { package = "willbooster-tree-sitter-html", version = "1" }
+tree-sitter-html = { package = "willbooster-tree-sitter-html", version = "2" }
 ```
 
 ```rust
