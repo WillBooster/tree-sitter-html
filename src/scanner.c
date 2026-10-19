@@ -33,6 +33,8 @@ typedef struct {
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
+static bool close_void_element(Scanner *scanner, TSLexer *lexer);
+static bool scan_contiguous_attribute_content(TSLexer *lexer, const bool *valid_symbols);
 static bool scan_unquoted_attribute_fragment(TSLexer *lexer);
 static bool is_unquoted_attribute_content(int32_t character);
 
@@ -482,17 +484,22 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return scan_raw_text(scanner, lexer);
     }
 
-    if (valid_symbols[UNQUOTED_ATTRIBUTE_FRAGMENT] && !valid_symbols[START_TAG_NAME] &&
-        !lexer->eof(lexer) && is_unquoted_attribute_content(lexer->lookahead)) {
-        return scan_unquoted_attribute_fragment(lexer);
-    }
-
-    if (valid_symbols[ATTRIBUTE_ENTITY] && !valid_symbols[START_TAG_NAME] && lexer->lookahead == '&') {
-        return scan_attribute_entity(lexer, ATTRIBUTE_ENTITY, ATTRIBUTE_AMPERSAND);
+    if (scan_contiguous_attribute_content(lexer, valid_symbols)) {
+        return true;
     }
 
     if (valid_symbols[ATTRIBUTE_ENTITY] && !valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY] && lexer->lookahead == '/') {
         return false;
+    }
+
+    bool close_void = valid_symbols[IMPLICIT_END_TAG] && !valid_symbols[SELF_CLOSING_TAG_DELIMITER] &&
+                      scanner->tags.size > 0 && tag_is_void(top_tag(scanner));
+    bool valid_tag_name = valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME] ||
+                          valid_symbols[ERRONEOUS_END_TAG_NAME];
+    bool in_tag = valid_tag_name || valid_symbols[SELF_CLOSING_TAG_DELIMITER] ||
+                  valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY];
+    if (iswspace(lexer->lookahead) && !in_tag) {
+        return close_void && close_void_element(scanner, lexer);
     }
 
     while (iswspace(lexer->lookahead)) {
@@ -502,13 +509,8 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return scan_attribute_entity(lexer, UNQUOTED_ATTRIBUTE_ENTITY, ATTRIBUTE_AMPERSAND);
     }
 
-    bool close_void = valid_symbols[IMPLICIT_END_TAG] && !valid_symbols[SELF_CLOSING_TAG_DELIMITER] &&
-                      scanner->tags.size > 0 && tag_is_void(top_tag(scanner));
     if (close_void && lexer->lookahead != '<') {
-        lexer->mark_end(lexer);
-        pop_tag(scanner);
-        lexer->result_symbol = IMPLICIT_END_TAG;
-        return true;
+        return close_void_element(scanner, lexer);
     }
 
     switch (lexer->lookahead) {
@@ -528,14 +530,31 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
             break;
 
         default:
-            if ((valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME] ||
-                 valid_symbols[ERRONEOUS_END_TAG_NAME]) && !valid_symbols[RAW_TEXT]) {
+            if (valid_tag_name && !valid_symbols[RAW_TEXT]) {
                 return valid_symbols[START_TAG_NAME] ? scan_start_tag_name(scanner, lexer)
                                                      : scan_end_tag_name(scanner, lexer, valid_symbols[END_TAG_NAME]);
             }
     }
 
     return false;
+}
+
+static bool close_void_element(Scanner *scanner, TSLexer *lexer) {
+    lexer->mark_end(lexer);
+    pop_tag(scanner);
+    lexer->result_symbol = IMPLICIT_END_TAG;
+    return true;
+}
+
+static bool scan_contiguous_attribute_content(TSLexer *lexer, const bool *valid_symbols) {
+    if (valid_symbols[START_TAG_NAME] || lexer->eof(lexer)) {
+        return false;
+    }
+    if (valid_symbols[UNQUOTED_ATTRIBUTE_FRAGMENT] && is_unquoted_attribute_content(lexer->lookahead)) {
+        return scan_unquoted_attribute_fragment(lexer);
+    }
+    return valid_symbols[ATTRIBUTE_ENTITY] && lexer->lookahead == '&' &&
+           scan_attribute_entity(lexer, ATTRIBUTE_ENTITY, ATTRIBUTE_AMPERSAND);
 }
 
 static bool scan_unquoted_attribute_fragment(TSLexer *lexer) {
