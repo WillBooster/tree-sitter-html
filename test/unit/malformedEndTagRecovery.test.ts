@@ -263,6 +263,9 @@ test('retains elements and real closes when malformed attribute content contains
       ['div', ' a=x<<b'],
       ['div', ' a=<b'],
       ['div', ' a= <b'],
+      ['div', ' a="x"<b'],
+      ['div', " a='x'<b"],
+      ['div', ' a=""<b'],
     ]) {
       const content = `<${tag}${attributes}>body</${tag}>`;
       const source = `<section>${content}<p>after</p></section>`;

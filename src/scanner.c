@@ -612,7 +612,7 @@ static bool accepts_tag_suffix(TSLexer *lexer, bool closing) {
         if (quote) {
             if (lexer->lookahead == quote) {
                 quote = 0;
-                attribute_component = false;
+                attribute_component = true;
             }
         } else if (value_start && (lexer->lookahead == '\'' || lexer->lookahead == '"')) {
             quote = lexer->lookahead;
