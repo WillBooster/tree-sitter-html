@@ -14,7 +14,7 @@ to its authors and contributors. This is not an official release of that project
 
 This fork is based on upstream's version 0.23.2 grammar and external scanner and generates the parser with the
 [WillBooster/tree-sitter](https://github.com/WillBooster/tree-sitter) generator. The parser carries that fork's own ABI
-number, so it loads only with the WillBooster runtime, version 2.0.0 or later in the 2.x series
+number, so it loads only with the WillBooster runtime, version 2.x
 ([willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter),
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter)); upstream's runtime rejects
 it. Input that contains NUL characters can parse to a different tree than with upstream's 0.23.2 parser, because the
@@ -34,10 +34,17 @@ exceeds its fixed-size buffer, the outermost tag identities are lost, which can 
 tags close. Custom tag names longer than 255 bytes are truncated in serialized state.
 Malformed input after a void element can replace its enclosing element with an `ERROR` node during recovery.
 
+Attribute values retain their complete `attribute_value` range and expose recognized named and numeric character
+references as `entity` children. Quoted values retain their `quoted_attribute_value` wrapper. Other value content,
+including literal ampersands, has no child nodes, so injections targeting `attribute_value` retain it by default. Set `injection.include-children` when the injected language needs the original reference
+spellings. Legacy names without a semicolon remain literal before an ASCII letter, digit, or `=`; unknown
+names and incomplete numeric prefixes remain literal. Comments are document or element content, and are not accepted
+between attributes. Comment-shaped text inside a quoted value remains part of that value.
+
 ## Usage
 
 The npm package ships `tree-sitter-html.wasm` for
-[@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter) version 2.0.0 or later in the 2.x series, which runs in Node.js, Bun, browsers, and Cloudflare Workers. In Node.js and Bun, load the grammar from its path:
+[@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter) version 2.x, which runs in Node.js, Bun, browsers, and Cloudflare Workers. In Node.js and Bun, load the grammar from its path:
 
 ```js
 import { fileURLToPath } from 'node:url';
@@ -84,7 +91,7 @@ fuzzed with:
 ```toml
 [dependencies]
 tree-sitter = { package = "willbooster-tree-sitter", version = "2.0.0" }
-tree-sitter-html = { package = "willbooster-tree-sitter-html", version = "2" }
+tree-sitter-html = { package = "willbooster-tree-sitter-html", version = "3" }
 ```
 
 ```rust
@@ -142,6 +149,9 @@ afterwards.
 
 CI also runs these tests on Linux arm64 and macOS, where the CLI compiles the parser and the scanner natively, and fuzzes
 both with libFuzzer and sanitizers (`.github/workflows/robustness.yml`).
+
+Run `script/generate-entities` with Python 3.8 or later when refreshing the HTML Standard's named-reference data, then regenerate
+and commit `src/`. The command reads the official `entities.json` over HTTPS.
 
 ### References
 

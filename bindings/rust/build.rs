@@ -1,11 +1,8 @@
 fn main() {
     let src_dir = std::path::Path::new("src");
-    // The sources include headers of this directory (tag.h, tree_sitter/*.h), so any change in it rebuilds them.
     println!("cargo:rerun-if-changed={}", src_dir.display());
 
     let mut c_config = cc::Build::new();
-    // The scanner, kept identical to upstream's, falls through a switch case on purpose, which GCC reports under the
-    // warnings cc enables; upstream's build script passes the same two flags.
     c_config
         .std("c11")
         .include(src_dir)

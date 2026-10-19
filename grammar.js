@@ -12,7 +12,6 @@ module.exports = grammar({
   name: 'html',
 
   extras: $ => [
-    $.comment,
     /\s+/,
   ],
 
@@ -26,6 +25,10 @@ module.exports = grammar({
     $._implicit_end_tag,
     $.raw_text,
     $.comment,
+    $._attribute_entity,
+    $._unquoted_attribute_entity,
+    $._attribute_ampersand,
+    $._unquoted_attribute_fragment,
   ],
 
   rules: {
@@ -42,6 +45,7 @@ module.exports = grammar({
 
     _node: $ => choice(
       $.doctype,
+      $.comment,
       $.entity,
       $.text,
       $.element,
@@ -124,13 +128,32 @@ module.exports = grammar({
 
     attribute_name: _ => /[^<>"'/=\s]+/,
 
-    attribute_value: _ => /[^<>"'=\s]+/,
+    attribute_value: $ => seq(
+      choice(
+        alias($._unquoted_attribute_entity, $.entity),
+        /[^<>"'=\s&]+/,
+        $._attribute_ampersand,
+      ),
+      repeat(choice(
+        alias($._attribute_entity, $.entity),
+        $._unquoted_attribute_fragment,
+        $._attribute_ampersand,
+      )),
+    ),
 
     entity: _ => token(/&(#([xX][0-9a-fA-F]+|[0-9]+)|[A-Za-z][A-Za-z0-9]*);?/),
 
     quoted_attribute_value: $ => choice(
-      seq('\'', optional(alias(/[^']+/, $.attribute_value)), '\''),
-      seq('"', optional(alias(/[^"]+/, $.attribute_value)), '"'),
+      seq('\'', optional(alias(repeat1(choice(
+        alias($._attribute_entity, $.entity),
+        token.immediate(/[^'&]+/),
+        $._attribute_ampersand,
+      )), $.attribute_value)), '\''),
+      seq('"', optional(alias(repeat1(choice(
+        alias($._attribute_entity, $.entity),
+        token.immediate(/[^"&]+/),
+        $._attribute_ampersand,
+      )), $.attribute_value)), '"'),
     ),
 
     text: _ => token.immediate(/[^<&]+|&/),

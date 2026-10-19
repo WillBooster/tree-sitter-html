@@ -7,7 +7,6 @@ import { generationInputMtime } from '../helpers/generationInputs.js';
 import { Language, Parser } from '@willbooster/web-tree-sitter';
 
 const Root = path.join(import.meta.dirname, '../..');
-// The Wasm build is the one the package ships.
 const WasmPath = path.join(Root, 'tree-sitter-html.wasm');
 await Parser.init();
 const parser = new Parser();
@@ -15,9 +14,13 @@ parser.setLanguage(await Language.load(WasmPath));
 
 // The tests load the existing Wasm build, so a stale one would hide an edit that makes error recovery slower than linear.
 test('uses a Wasm build built from the current parser', () => {
-  const sources = ['grammar.js', 'src/parser.c', 'src/scanner.c', 'src/tag.h', 'src/tree_sitter/parser.h'].map(
-    (name) => fs.statSync(path.join(Root, name)).mtimeMs
-  );
+  const sources = [
+    'grammar.js',
+    ...fs
+      .readdirSync(path.join(Root, 'src'), { recursive: true, encoding: 'utf8' })
+      .filter((file) => /\.[ch]$/.test(file))
+      .map((file) => `src/${file}`),
+  ].map((name) => fs.statSync(path.join(Root, name)).mtimeMs);
   expect(
     Math.max(generationInputMtime(Root), ...sources) > fs.statSync(WasmPath).mtimeMs,
     'generation inputs or src/ changed after the Wasm build was built; run `bun run build/ci`'
