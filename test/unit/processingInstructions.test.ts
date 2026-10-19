@@ -228,3 +228,59 @@ test('keeps non-closing markup as text across RCDATA references and raw-text con
     parser.delete();
   }
 });
+
+test('preserves markup inside foreign title elements and HTML text inside integration points', () => {
+  const parser = new Parser().setLanguage(language);
+  const query = new Query(language, highlights);
+  try {
+    for (const [prefix, suffix] of [
+      ['<svg>', '</svg>'],
+      ['<math>', '</math>'],
+      ['<svg><foreignObject><svg>', '</svg></foreignObject></svg>'],
+    ]) {
+      const source = `${prefix}<title><!--label--><?target?>icon</title>${suffix}<p>after</p>`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(false);
+        expect(tree.rootNode.descendantsOfType('comment').map((node) => node.text)).toEqual(['<!--label-->']);
+        expect(tree.rootNode.descendantsOfType('processing_instruction').map((node) => node.text)).toEqual([
+          '<?target?>',
+        ]);
+        expect(
+          query
+            .captures(tree.rootNode)
+            .filter((capture) => capture.name === 'comment')
+            .map((capture) => capture.node.text)
+        ).toEqual(['<!--label-->']);
+        expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+      } finally {
+        tree.delete();
+      }
+    }
+    for (const [prefix, suffix] of [
+      ['', ''],
+      ['<svg><foreignObject>', '</foreignObject></svg>'],
+      ['<svg><desc>', '</desc></svg>'],
+      ['<svg><title>', '</title></svg>'],
+      ['<math><mtext>', '</mtext></math>'],
+    ]) {
+      const source = `${prefix}<title><!--label--><?target?>icon</title>${suffix}<p>after</p>`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(false);
+        expect(tree.rootNode.descendantsOfType('comment'), source).toHaveLength(0);
+        expect(tree.rootNode.descendantsOfType('processing_instruction'), source).toHaveLength(0);
+        expect(
+          tree.rootNode.descendantsOfType('text').map((node) => node.text),
+          source
+        ).toContain('<!--label--><?target?>icon');
+        expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
+    query.delete();
+    parser.delete();
+  }
+});

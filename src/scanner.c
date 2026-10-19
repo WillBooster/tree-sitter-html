@@ -233,7 +233,8 @@ static inline int32_t ascii_upper(int32_t character) {
 static bool is_html_whitespace(int32_t character);
 static bool is_raw_name_boundary(TSLexer *lexer);
 static bool scan_processing_instruction_target(TSLexer *lexer);
-static bool tag_uses_text_tokenization(const Tag *tag);
+static bool tag_uses_text_tokenization(Scanner *scanner);
+static bool in_html_namespace(const Scanner *scanner);
 
 static bool scan_processing_instruction(TSLexer *lexer, const bool *valid_symbols) {
     if (!valid_symbols[PROCESSING_INSTRUCTION]) {
@@ -259,21 +260,62 @@ static bool scan_processing_instruction(TSLexer *lexer, const bool *valid_symbol
     return true;
 }
 
-static bool tag_uses_text_tokenization(const Tag *tag) {
+static bool tag_uses_text_tokenization(Scanner *scanner) {
+    const Tag *tag = top_tag(scanner);
     if (!tag) {
         return false;
     }
     if (tag->type != CUSTOM) {
-        return tag->type == TEXTAREA || tag->type == TITLE || tag->type == IFRAME;
+        return (tag->type == TEXTAREA || tag->type == TITLE || tag->type == IFRAME) && in_html_namespace(scanner);
     }
     static const char *names[] = {"XMP", "NOEMBED", "NOFRAMES", "PLAINTEXT"};
     for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
         size_t length = strlen(names[i]);
         if (tag->custom_tag_name.size == length && memcmp(tag->custom_tag_name.contents, names[i], length) == 0) {
-            return true;
+            return in_html_namespace(scanner);
         }
     }
     return false;
+}
+
+typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH } Namespace;
+
+static Namespace child_namespace(Namespace current, const Tag *tag);
+
+static bool in_html_namespace(const Scanner *scanner) {
+    Namespace current = NAMESPACE_HTML;
+    for (unsigned i = 0; i < scanner->tags.size; i++) {
+        const TagRun *run = &scanner->tags.contents[i];
+        if (current == NAMESPACE_HTML) {
+            if (run->tag.type == SVG) current = NAMESPACE_SVG;
+            if (run->tag.type == MATH) current = NAMESPACE_MATH;
+        }
+        if (i + 1 == scanner->tags.size && run->count == 1) {
+            return current == NAMESPACE_HTML;
+        }
+        current = child_namespace(current, &run->tag);
+    }
+    return current == NAMESPACE_HTML;
+}
+
+static Namespace child_namespace(Namespace current, const Tag *tag) {
+    if (current == NAMESPACE_SVG && tag->type == TITLE) {
+        return NAMESPACE_HTML;
+    }
+    if (tag->type != CUSTOM) {
+        return current;
+    }
+    static const char *svg_points[] = {"FOREIGNOBJECT", "DESC"};
+    static const char *math_points[] = {"MI", "MO", "MN", "MS", "MTEXT"};
+    const char **points = current == NAMESPACE_SVG ? svg_points : math_points;
+    unsigned count = current == NAMESPACE_SVG ? 2 : 5;
+    for (unsigned i = 0; i < count; i++) {
+        size_t length = strlen(points[i]);
+        if (tag->custom_tag_name.size == length && memcmp(tag->custom_tag_name.contents, points[i], length) == 0) {
+            return NAMESPACE_HTML;
+        }
+    }
+    return current;
 }
 
 static bool scan_processing_instruction_target(TSLexer *lexer) {
@@ -556,7 +598,7 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     }
 
     if (valid_symbols[ELEMENT_TEXT] && in_content &&
-        tag_uses_text_tokenization(top_tag(scanner))) {
+        tag_uses_text_tokenization(scanner)) {
         return scan_element_text(lexer, top_tag(scanner));
     }
 
