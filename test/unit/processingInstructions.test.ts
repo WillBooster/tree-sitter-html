@@ -329,7 +329,7 @@ test('retains foreign text context after deep ancestors exceed scanner storage',
       ['<math>', '</math>'],
       ['<svg><foreignObject><svg>', '</svg></foreignObject></svg>'],
     ]) {
-      const source = `${prefix}${'<g><g-x>'.repeat(200)}<title><!--label--><?target?>icon</title>${'</g-x></g>'.repeat(200)}${suffix}<p>after</p>`;
+      const source = `${prefix}${'<g><g-x>'.repeat(200)}<title><!--label--><?target?>icon</title>${'</g-x></g>'.repeat(200)}${suffix}<title><!--html--><?html?>tail</title><textarea><!--textarea-->tail</textarea><p>after</p>`;
       const tree = parser.parse(source)!;
       try {
         expect(tree.rootNode.descendantsOfType('comment').map((node) => node.text)).toEqual(['<!--label-->']);
@@ -337,6 +337,12 @@ test('retains foreign text context after deep ancestors exceed scanner storage',
           '<?target?>',
         ]);
         expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+        expect(tree.rootNode.descendantsOfType('text').map((node) => node.text)).toEqual([
+          'icon',
+          '<!--html--><?html?>tail',
+          '<!--textarea-->tail',
+          'after',
+        ]);
         const index = source.indexOf('label');
         tree.edit(
           new Edit({

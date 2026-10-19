@@ -112,8 +112,14 @@ static uint16_t write_tag_run(const Tag *tag, uint16_t count, char *buffer, unsi
     return written;
 }
 
-// Serializes the innermost tags first, which void-element closing and raw-text scanning depend on, so that tags
-// that do not fit are the outermost ones, which deserialize as unknown.
+static unsigned retained_tag_run_start(const Scanner *scanner);
+static bool namespace_boundary_tag(const Tag *tag);
+
+static uint16_t write_unknown_tags(unsigned count, char *buffer, unsigned *size) {
+    Tag unknown = tag_new();
+    return write_tag_run(&unknown, MIN(count, UINT16_MAX), buffer, size);
+}
+
 static unsigned serialize(Scanner *scanner, char *buffer) {
     unsigned depth = 0;
     for (unsigned i = 0; i < scanner->tags.size; i++) {
@@ -127,14 +133,26 @@ static unsigned serialize(Scanner *scanner, char *buffer) {
     size += sizeof(tag_count);
     unsigned namespace_offset = size++;
 
+    unsigned retained_start = retained_tag_run_start(scanner);
+    unsigned unknown_count = 0;
     for (unsigned i = scanner->tags.size; i > 0 && serialized_tag_count < tag_count; i--) {
         const TagRun *run = &scanner->tags.contents[i - 1];
+        if (i <= retained_start && !namespace_boundary_tag(&run->tag)) {
+            unknown_count += run->count;
+            continue;
+        }
+        if (unknown_count > 0) {
+            serialized_tag_count += write_unknown_tags(MIN(unknown_count, tag_count - serialized_tag_count), buffer, &size);
+            unknown_count = 0;
+            if (serialized_tag_count == tag_count) break;
+        }
         uint16_t count = MIN(run->count, (unsigned)(tag_count - serialized_tag_count));
         uint16_t written = write_tag_run(&run->tag, count, buffer, &size);
         serialized_tag_count += written;
-        if (written < count) {
-            break;
-        }
+        if (written < count) break;
+    }
+    if (unknown_count > 0 && serialized_tag_count < tag_count) {
+        serialized_tag_count += write_unknown_tags(MIN(unknown_count, tag_count - serialized_tag_count), buffer, &size);
     }
 
     Namespace boundary = scanner->omitted_namespace;
@@ -152,6 +170,51 @@ static unsigned serialize(Scanner *scanner, char *buffer) {
     buffer[namespace_offset] = (char)boundary;
     memcpy(&buffer[0], &serialized_tag_count, sizeof(serialized_tag_count));
     return size;
+}
+
+static unsigned serialized_run_size(const Tag *tag, unsigned count) {
+    if (count == 0) return 0;
+    unsigned size = serialized_tag_size(tag);
+    return MIN((uint64_t)size * count, size + TAG_RUN_SIZE);
+}
+
+static unsigned retained_tag_run_start(const Scanner *scanner) {
+    unsigned capacity = TREE_SITTER_SERIALIZATION_BUFFER_SIZE - 2 * sizeof(uint16_t) - 1;
+    unsigned suffix_size = 0;
+    for (unsigned i = 0; i < scanner->tags.size; i++) {
+        const TagRun *run = &scanner->tags.contents[i];
+        suffix_size += serialized_run_size(&run->tag, run->count);
+    }
+    if (suffix_size <= capacity) return 0;
+    Array(unsigned) prefix_sizes = array_new();
+    array_push(&prefix_sizes, 0);
+    unsigned prefix_size = 0;
+    unsigned unknown_count = 0;
+    Tag unknown = tag_new();
+    for (unsigned i = 0; i < scanner->tags.size; i++) {
+        const TagRun *run = &scanner->tags.contents[i];
+        if (namespace_boundary_tag(&run->tag)) {
+            prefix_size += serialized_run_size(&unknown, unknown_count) + serialized_run_size(&run->tag, run->count);
+            unknown_count = 0;
+        } else {
+            unknown_count += run->count;
+        }
+        array_push(&prefix_sizes, prefix_size + serialized_run_size(&unknown, unknown_count));
+    }
+    unsigned retained_start = 0;
+    while (retained_start < scanner->tags.size && prefix_sizes.contents[retained_start] + suffix_size > capacity) {
+        const TagRun *run = &scanner->tags.contents[retained_start++];
+        suffix_size -= serialized_run_size(&run->tag, run->count);
+    }
+    if (prefix_sizes.contents[retained_start] + suffix_size > capacity) retained_start = 0;
+    array_delete(&prefix_sizes);
+    return retained_start;
+}
+
+static bool namespace_boundary_tag(const Tag *tag) {
+    return tag->type == SVG || tag->type == MATH ||
+           child_namespace(NAMESPACE_SVG, tag) == NAMESPACE_HTML ||
+           child_namespace(NAMESPACE_MATH, tag) == NAMESPACE_HTML;
 }
 
 static Tag read_tag(const char *buffer, unsigned *size) {
@@ -517,7 +580,7 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
         }
 
         for (unsigned i = scanner->tags.size; i > 0; i--) {
-            if (scanner->tags.contents[i - 1].tag.type == next_tag.type) {
+            if (tag_eq(&scanner->tags.contents[i - 1].tag, &next_tag)) {
                 pop_tag(scanner);
                 lexer->result_symbol = IMPLICIT_END_TAG;
                 tag_free(&next_tag);

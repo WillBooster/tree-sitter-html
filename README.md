@@ -14,13 +14,13 @@ to its authors and contributors. This is not an official release of that project
 
 This fork is based on upstream's version 0.23.2 grammar and external scanner and generates the parser with the
 [WillBooster/tree-sitter](https://github.com/WillBooster/tree-sitter) generator. The parser carries that fork's own ABI
-number, so it loads only with the WillBooster runtime, version 2.0.0 or later
+number, so it loads only with the WillBooster runtime, version 2.0.0 or later in the 2.x series
 ([willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter),
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter)); upstream's runtime rejects
 it. Input that contains NUL characters can parse to a different tree than with upstream's 0.23.2 parser, because the
 lexers that generator emits treat a NUL character as an ordinary character. This grammar also accepts literal `>`
 characters and bare `&` in text nodes, which upstream 0.23.2 rejects. A bare `&` becomes its own `text` node beside
-surrounding text, while character references remain `entity` nodes. Its scanner requires an HTML tag-name boundary after
+surrounding text, while character references remain `entity` nodes. Processing instructions use source-preserving `processing_instruction` nodes and directive highlights. Instruction-looking content stays text in raw-text and RCDATA elements. Its scanner requires an HTML tag-name boundary after
 `</script` and `</style`, so longer names and overlapping prefixes remain raw text. Closing-name comparisons
 fold only ASCII letters, and embedded NUL characters remain part of raw-text content. Script content follows
 HTML escaped and double-escaped states, so closing-tag text inside a double escape remains raw text. A script that reaches
@@ -29,15 +29,15 @@ remaining content stays available for JavaScript injection. Incomplete closing t
 recovery errors. Unterminated style elements still report an error. Void elements close
 before following text, entities, and complete comments, which become siblings instead of children.
 Scanner serialization stores the open-tag stack from its innermost tag, compressing runs of identical tags, so active
-void, script, and style elements retain their identities when deeply nested. When deep nesting of distinct tags
-exceeds its fixed-size buffer, the outermost tag identities are lost, which can produce recovery errors when those
-tags close. Custom tag names longer than 255 bytes are truncated in serialized state.
+void, script, and style elements retain their identities when deeply nested. When distinct tags exceed the fixed-size
+buffer, serialization prioritizes inner tags and outer namespace boundaries, replacing ordinary outer tags with unknown
+runs. Lost tag identities can still produce recovery errors when those tags close. Custom tag names longer than 255 bytes are truncated in serialized state.
 Malformed input after a void element can replace its enclosing element with an `ERROR` node during recovery.
 
 ## Usage
 
 The npm package ships `tree-sitter-html.wasm` for
-[@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter) version 2.0.0 or later, which runs in Node.js, Bun, browsers, and Cloudflare Workers. In Node.js and Bun, load the grammar from its path:
+[@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter) version 2.0.0 or later in the 2.x series, which runs in Node.js, Bun, browsers, and Cloudflare Workers. In Node.js and Bun, load the grammar from its path:
 
 ```js
 import { fileURLToPath } from 'node:url';
