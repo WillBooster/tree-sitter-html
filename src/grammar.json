@@ -48,6 +48,19 @@
         },
         {
           "type": "SYMBOL",
+          "name": "processing_instruction"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_processing_instruction_text"
+          },
+          "named": true,
+          "value": "text"
+        },
+        {
+          "type": "SYMBOL",
           "name": "entity"
         },
         {
@@ -503,6 +516,14 @@
     {
       "type": "SYMBOL",
       "name": "comment"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "processing_instruction"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_processing_instruction_text"
     }
   ],
   "inline": [],

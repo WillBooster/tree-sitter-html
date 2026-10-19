@@ -1,0 +1,63 @@
+==================
+Processing instruction with data
+==================
+<?target data?>
+
+---
+
+(document (processing_instruction))
+
+==================
+Instructions close void elements
+==================
+<div><br><?_target-2 ???><p>after</p></div>
+
+---
+
+(document
+  (element
+    (start_tag (tag_name))
+    (element (start_tag (tag_name)))
+    (processing_instruction)
+    (element (start_tag (tag_name)) (text) (end_tag (tag_name)))
+    (end_tag (tag_name))))
+
+==================
+Reserved targets become comments
+==================
+<?XML version="1.0"?><p>after</p>
+
+---
+
+(document
+  (comment)
+  (element (start_tag (tag_name)) (text) (end_tag (tag_name))))
+
+==================
+Instruction-like RCDATA retains entities and closing tags
+==================
+<textarea><?target &amp; remainder</textarea><p>after</p>
+
+---
+
+(document
+  (element
+    (start_tag (tag_name))
+    (text)
+    (entity)
+    (text)
+    (end_tag (tag_name)))
+  (element (start_tag (tag_name)) (text) (end_tag (tag_name))))
+
+==================
+Instruction-like raw content retains entity spelling
+==================
+<iframe><?target &amp; remainder?></iframe>
+
+---
+
+(document
+  (element
+    (start_tag (tag_name))
+    (text)
+    (end_tag (tag_name))))

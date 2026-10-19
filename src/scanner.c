@@ -13,6 +13,8 @@ enum TokenType {
     IMPLICIT_END_TAG,
     RAW_TEXT,
     COMMENT,
+    PROCESSING_INSTRUCTION,
+    PROCESSING_INSTRUCTION_TEXT,
 };
 
 typedef struct {
@@ -80,7 +82,6 @@ static unsigned write_tag(const Tag *tag, char *buffer, unsigned size) {
     return size;
 }
 
-// Writes as many of `count` copies of `tag` as fit and returns how many were written.
 static uint16_t write_tag_run(const Tag *tag, uint16_t count, char *buffer, unsigned *size) {
     unsigned tag_size = serialized_tag_size(tag);
     if (*size + tag_size > TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
@@ -229,6 +230,79 @@ static inline int32_t ascii_upper(int32_t character) {
     return character >= 'a' && character <= 'z' ? character - 'a' + 'A' : character;
 }
 
+static bool is_html_whitespace(int32_t character);
+static bool scan_processing_instruction_target(TSLexer *lexer);
+static bool tag_uses_text_tokenization(const Tag *tag);
+
+static bool scan_processing_instruction(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
+    const Tag *tag = top_tag(scanner);
+    if (tag_uses_text_tokenization(tag)) {
+        if (!valid_symbols[PROCESSING_INSTRUCTION_TEXT]) {
+            return false;
+        }
+        bool rcdata = tag->type == TEXTAREA || tag->type == TITLE;
+        while (!lexer->eof(lexer) && lexer->lookahead != '<' && !(rcdata && lexer->lookahead == '&')) {
+            advance(lexer);
+        }
+        lexer->mark_end(lexer);
+        lexer->result_symbol = PROCESSING_INSTRUCTION_TEXT;
+        return true;
+    }
+    advance(lexer);
+    if (lexer->eof(lexer)) {
+        return false;
+    }
+    bool valid = scan_processing_instruction_target(lexer);
+    while (!lexer->eof(lexer) && lexer->lookahead != '>') {
+        advance(lexer);
+    }
+    enum TokenType result = valid ? PROCESSING_INSTRUCTION : COMMENT;
+    if (!valid_symbols[result] || (valid && lexer->eof(lexer))) {
+        return false;
+    }
+    if (!lexer->eof(lexer)) {
+        advance(lexer);
+    }
+    lexer->mark_end(lexer);
+    lexer->result_symbol = result;
+    return true;
+}
+
+static bool tag_uses_text_tokenization(const Tag *tag) {
+    if (!tag) {
+        return false;
+    }
+    if (tag->type != CUSTOM) {
+        return tag->type == TEXTAREA || tag->type == TITLE || tag->type == IFRAME;
+    }
+    static const char *names[] = {"XMP", "NOEMBED", "NOFRAMES", "PLAINTEXT"};
+    for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        size_t length = strlen(names[i]);
+        if (tag->custom_tag_name.size == length && memcmp(tag->custom_tag_name.contents, names[i], length) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool scan_processing_instruction_target(TSLexer *lexer) {
+    char target[16] = {0};
+    unsigned length = 0;
+    int32_t first = ascii_upper(lexer->lookahead);
+    bool valid = (first >= 'A' && first <= 'Z') || first == '_';
+    while (!lexer->eof(lexer) && lexer->lookahead != '>' && lexer->lookahead != '?' &&
+           !is_html_whitespace(lexer->lookahead)) {
+        int32_t character = ascii_upper(lexer->lookahead);
+        valid &= (character >= 'A' && character <= 'Z') ||
+                 (character >= '0' && character <= '9') || character == '-' || character == '_';
+        if (length < sizeof(target) - 1) {
+            target[length++] = (char)character;
+        }
+        advance(lexer);
+    }
+    return valid && strcmp(target, "XML") != 0 && strcmp(target, "XML-STYLESHEET") != 0;
+}
+
 typedef enum { RAW_TEXT_NORMAL, RAW_TEXT_ESCAPED, RAW_TEXT_DOUBLE_ESCAPED } RawTextMode;
 
 static bool scan_raw_less_than(TSLexer *lexer, bool script, RawTextMode *mode);
@@ -310,9 +384,11 @@ static bool scan_raw_name(TSLexer *lexer, const char *name) {
 }
 
 static bool is_raw_name_boundary(TSLexer *lexer) {
-    return lexer->lookahead == '>' || lexer->lookahead == '/' || lexer->lookahead == ' ' ||
-           lexer->lookahead == '\t' || lexer->lookahead == '\n' || lexer->lookahead == '\r' ||
-           lexer->lookahead == '\f';
+    return lexer->lookahead == '>' || lexer->lookahead == '/' || is_html_whitespace(lexer->lookahead);
+}
+
+static bool is_html_whitespace(int32_t character) {
+    return character == ' ' || character == '\t' || character == '\n' || character == '\r' || character == '\f';
 }
 
 static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
@@ -486,6 +562,10 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
                 pop_tag(scanner);
                 lexer->result_symbol = IMPLICIT_END_TAG;
                 return true;
+            }
+
+            if (lexer->lookahead == '?') {
+                return scan_processing_instruction(scanner, lexer, valid_symbols);
             }
 
             if (valid_symbols[IMPLICIT_END_TAG]) {

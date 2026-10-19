@@ -26,6 +26,8 @@ module.exports = grammar({
     $._implicit_end_tag,
     $.raw_text,
     $.comment,
+    $.processing_instruction,
+    $._processing_instruction_text,
   ],
 
   rules: {
@@ -42,6 +44,8 @@ module.exports = grammar({
 
     _node: $ => choice(
       $.doctype,
+      $.processing_instruction,
+      alias($._processing_instruction_text, $.text),
       $.entity,
       $.text,
       $.element,
@@ -126,7 +130,6 @@ module.exports = grammar({
 
     attribute_value: _ => /[^<>"'=\s]+/,
 
-    // HTML fixes the named-reference set: https://html.spec.whatwg.org/multipage/named-characters.html
     entity: _ => /&(#([xX][0-9a-fA-F]{1,6}|[0-9]{1,5})|[A-Za-z]{1,30});?/,
 
     quoted_attribute_value: $ => choice(
