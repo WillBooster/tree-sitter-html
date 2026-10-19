@@ -597,9 +597,6 @@ static bool has_end_tag_terminator(TSLexer *lexer) {
     if (lexer->lookahead == '>' || lexer->lookahead == '&' || lexer->eof(lexer)) {
         return true;
     }
-    if (lexer->lookahead == '/') {
-        return false;
-    }
     int32_t quote = 0;
     int32_t previous = 0;
     bool value_start = false;

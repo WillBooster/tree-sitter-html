@@ -119,6 +119,12 @@ test('retains sibling ownership after closing tags with ignored attributes', () 
   const parser = new Parser().setLanguage(language);
   try {
     for (const close of [
+      '</div/ >',
+      '</div/foo>',
+      '</div/ q>',
+      '</div/  \t>',
+      '</div / >',
+      '</div /foo>',
       '</div foo>',
       '</div class="a">',
       '</div class="<value>">',
