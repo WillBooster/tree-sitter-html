@@ -12,7 +12,6 @@ module.exports = grammar({
   name: 'html',
 
   extras: $ => [
-    $.comment,
     /\s+/,
   ],
 
@@ -26,6 +25,8 @@ module.exports = grammar({
     $._implicit_end_tag,
     $.raw_text,
     $.comment,
+    $._attribute_entity,
+    $._unquoted_attribute_entity,
   ],
 
   rules: {
@@ -42,6 +43,7 @@ module.exports = grammar({
 
     _node: $ => choice(
       $.doctype,
+      $.comment,
       $.entity,
       $.text,
       $.element,
@@ -124,14 +126,32 @@ module.exports = grammar({
 
     attribute_name: _ => /[^<>"'/=\s]+/,
 
-    attribute_value: _ => /[^<>"'=\s]+/,
+    attribute_value: $ => seq(
+      choice(
+        alias($._unquoted_attribute_entity, $.entity),
+        /[^<>"'=\s&]+/,
+        '&',
+      ),
+      repeat(choice(
+        alias($._attribute_entity, $.entity),
+        token.immediate(prec(1, /[^<>"'=\s&]+/)),
+        token.immediate(prec(1, '&')),
+      )),
+    ),
 
-    // HTML fixes the named-reference set: https://html.spec.whatwg.org/multipage/named-characters.html
     entity: _ => /&(#([xX][0-9a-fA-F]{1,6}|[0-9]{1,5})|[A-Za-z]{1,30});?/,
 
     quoted_attribute_value: $ => choice(
-      seq('\'', optional(alias(/[^']+/, $.attribute_value)), '\''),
-      seq('"', optional(alias(/[^"]+/, $.attribute_value)), '"'),
+      seq('\'', optional(alias(repeat1(choice(
+        alias($._attribute_entity, $.entity),
+        token.immediate(/[^'&]+/),
+        token.immediate('&'),
+      )), $.attribute_value)), '\''),
+      seq('"', optional(alias(repeat1(choice(
+        alias($._attribute_entity, $.entity),
+        token.immediate(/[^"&]+/),
+        token.immediate('&'),
+      )), $.attribute_value)), '"'),
     ),
 
     text: _ => /[^<&\s]([^<&]*[^<&\s])?|&/,

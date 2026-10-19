@@ -1,5 +1,6 @@
 #include "tag.h"
 #include "tree_sitter/parser.h"
+#include "attributeEntity.h"
 
 #include <wctype.h>
 
@@ -13,6 +14,8 @@ enum TokenType {
     IMPLICIT_END_TAG,
     RAW_TEXT,
     COMMENT,
+    ATTRIBUTE_ENTITY,
+    UNQUOTED_ATTRIBUTE_ENTITY,
 };
 
 typedef struct {
@@ -448,6 +451,20 @@ static bool scan_comment_or_void_end(Scanner *scanner, TSLexer *lexer, bool clos
     return true;
 }
 
+static bool scan_markup_open(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols, bool close_void) {
+    lexer->mark_end(lexer);
+    advance(lexer);
+    if (valid_symbols[COMMENT] && lexer->lookahead == '!') {
+        return scan_comment_or_void_end(scanner, lexer, close_void);
+    }
+    if (close_void && lexer->lookahead != '/') {
+        pop_tag(scanner);
+        lexer->result_symbol = IMPLICIT_END_TAG;
+        return true;
+    }
+    return valid_symbols[IMPLICIT_END_TAG] && scan_implicit_end_tag(scanner, lexer);
+}
+
 static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     if (valid_symbols[IMPLICIT_END_TAG] && lexer->eof(lexer) &&
         top_tag(scanner) && top_tag(scanner)->type == SCRIPT) {
@@ -460,8 +477,15 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return scan_raw_text(scanner, lexer);
     }
 
+    if (valid_symbols[ATTRIBUTE_ENTITY] && lexer->lookahead == '&') {
+        return scan_attribute_entity(lexer, ATTRIBUTE_ENTITY);
+    }
+
     while (iswspace(lexer->lookahead)) {
         skip(lexer);
+    }
+    if (valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY] && lexer->lookahead == '&') {
+        return scan_attribute_entity(lexer, UNQUOTED_ATTRIBUTE_ENTITY);
     }
 
     bool close_void = valid_symbols[IMPLICIT_END_TAG] && !valid_symbols[SELF_CLOSING_TAG_DELIMITER] &&
@@ -475,23 +499,7 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
 
     switch (lexer->lookahead) {
         case '<':
-            lexer->mark_end(lexer);
-            advance(lexer);
-
-            if (lexer->lookahead == '!') {
-                return scan_comment_or_void_end(scanner, lexer, close_void);
-            }
-
-            if (close_void && lexer->lookahead != '/') {
-                pop_tag(scanner);
-                lexer->result_symbol = IMPLICIT_END_TAG;
-                return true;
-            }
-
-            if (valid_symbols[IMPLICIT_END_TAG]) {
-                return scan_implicit_end_tag(scanner, lexer);
-            }
-            break;
+            return scan_markup_open(scanner, lexer, valid_symbols, close_void);
 
         case '\0':
             if (valid_symbols[IMPLICIT_END_TAG]) {

@@ -48,6 +48,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "comment"
+        },
+        {
+          "type": "SYMBOL",
           "name": "entity"
         },
         {
@@ -378,8 +382,70 @@
       "value": "[^<>\"'/=\\s]+"
     },
     "attribute_value": {
-      "type": "PATTERN",
-      "value": "[^<>\"'=\\s]+"
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_unquoted_attribute_entity"
+              },
+              "named": true,
+              "value": "entity"
+            },
+            {
+              "type": "PATTERN",
+              "value": "[^<>\"'=\\s&]+"
+            },
+            {
+              "type": "STRING",
+              "value": "&"
+            }
+          ]
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_attribute_entity"
+                },
+                "named": true,
+                "value": "entity"
+              },
+              {
+                "type": "IMMEDIATE_TOKEN",
+                "content": {
+                  "type": "PREC",
+                  "value": 1,
+                  "content": {
+                    "type": "PATTERN",
+                    "value": "[^<>\"'=\\s&]+"
+                  }
+                }
+              },
+              {
+                "type": "IMMEDIATE_TOKEN",
+                "content": {
+                  "type": "PREC",
+                  "value": 1,
+                  "content": {
+                    "type": "STRING",
+                    "value": "&"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
     },
     "entity": {
       "type": "PATTERN",
@@ -401,8 +467,35 @@
                 {
                   "type": "ALIAS",
                   "content": {
-                    "type": "PATTERN",
-                    "value": "[^']+"
+                    "type": "REPEAT1",
+                    "content": {
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "ALIAS",
+                          "content": {
+                            "type": "SYMBOL",
+                            "name": "_attribute_entity"
+                          },
+                          "named": true,
+                          "value": "entity"
+                        },
+                        {
+                          "type": "IMMEDIATE_TOKEN",
+                          "content": {
+                            "type": "PATTERN",
+                            "value": "[^'&]+"
+                          }
+                        },
+                        {
+                          "type": "IMMEDIATE_TOKEN",
+                          "content": {
+                            "type": "STRING",
+                            "value": "&"
+                          }
+                        }
+                      ]
+                    }
                   },
                   "named": true,
                   "value": "attribute_value"
@@ -431,8 +524,35 @@
                 {
                   "type": "ALIAS",
                   "content": {
-                    "type": "PATTERN",
-                    "value": "[^\"]+"
+                    "type": "REPEAT1",
+                    "content": {
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "ALIAS",
+                          "content": {
+                            "type": "SYMBOL",
+                            "name": "_attribute_entity"
+                          },
+                          "named": true,
+                          "value": "entity"
+                        },
+                        {
+                          "type": "IMMEDIATE_TOKEN",
+                          "content": {
+                            "type": "PATTERN",
+                            "value": "[^\"&]+"
+                          }
+                        },
+                        {
+                          "type": "IMMEDIATE_TOKEN",
+                          "content": {
+                            "type": "STRING",
+                            "value": "&"
+                          }
+                        }
+                      ]
+                    }
                   },
                   "named": true,
                   "value": "attribute_value"
@@ -456,10 +576,6 @@
     }
   },
   "extras": [
-    {
-      "type": "SYMBOL",
-      "name": "comment"
-    },
     {
       "type": "PATTERN",
       "value": "\\s+"
@@ -503,6 +619,14 @@
     {
       "type": "SYMBOL",
       "name": "comment"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_attribute_entity"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_unquoted_attribute_entity"
     }
   ],
   "inline": [],
