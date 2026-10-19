@@ -104,7 +104,16 @@ test('retains raw-text elements and their content through malformed closes', () 
 test('retains sibling ownership after closing tags with ignored attributes', () => {
   const parser = new Parser().setLanguage(language);
   try {
-    for (const close of ['</div foo>', '</div class="a">', '</div class="<value>">']) {
+    for (const close of [
+      '</div foo>',
+      '</div class="a">',
+      '</div class="<value>">',
+      "</div'>",
+      '</div;>',
+      '</div=>',
+      String.raw`</div\>`,
+      '</div\u00A0>',
+    ]) {
       const source = `<section><div>x${close}<p>after</p></section>`;
       const tree = parser.parse(source)!;
       try {
@@ -142,6 +151,31 @@ test('requires a closing style tag at EOF after recovering a malformed close', (
           source
         ).toEqual([source.slice('<style>'.length)]);
         expect(tree.rootNode.descendantsOfType('element'), source).toHaveLength(0);
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});
+
+test('preserves real ancestor closing tags after an unmatched slash-ended close', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const source of ['<div></p/></div>', '<section><div></p/></div><p>after</p></section>']) {
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(true);
+        const outer = tree.rootNode.firstNamedChild!;
+        const name = outer.firstNamedChild?.descendantsOfType('tag_name')[0]?.text;
+        expect(outer.namedChildren.find((node) => node.type === 'end_tag')?.text, source).toBe(`</${name}>`);
+        if (name === 'section') {
+          expect(
+            outer.namedChildren.filter((node) => node.type === 'element').map((node) => node.text),
+            source
+          ).toEqual(['<div></p/></div>', '<p>after</p>']);
+        }
       } finally {
         tree.delete();
       }

@@ -541,7 +541,8 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
             break;
 
         case '/':
-            if (valid_symbols[SELF_CLOSING_TAG_DELIMITER]) {
+            if (valid_symbols[SELF_CLOSING_TAG_DELIMITER] && !valid_symbols[START_TAG_NAME] &&
+                !valid_symbols[END_TAG_NAME]) {
                 return scan_self_closing_tag_delimiter(scanner, lexer);
             }
             break;
@@ -600,17 +601,23 @@ static bool has_end_tag_terminator(TSLexer *lexer) {
         return false;
     }
     int32_t quote = 0;
+    bool value_start = false;
     while (!lexer->eof(lexer)) {
         if (quote) {
             if (lexer->lookahead == quote) {
                 quote = 0;
             }
-        } else if (lexer->lookahead == '\'' || lexer->lookahead == '"') {
+        } else if (value_start && (lexer->lookahead == '\'' || lexer->lookahead == '"')) {
             quote = lexer->lookahead;
+            value_start = false;
         } else if (lexer->lookahead == '>') {
             return true;
         } else if (lexer->lookahead == '<') {
             return false;
+        } else if (lexer->lookahead == '=') {
+            value_start = true;
+        } else if (!iswspace(lexer->lookahead)) {
+            value_start = false;
         }
         advance(lexer);
     }
