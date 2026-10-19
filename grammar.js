@@ -27,7 +27,7 @@ module.exports = grammar({
     $.raw_text,
     $.comment,
     $.processing_instruction,
-    $._processing_instruction_text,
+    $._element_text,
   ],
 
   rules: {
@@ -45,7 +45,7 @@ module.exports = grammar({
     _node: $ => choice(
       $.doctype,
       $.processing_instruction,
-      alias($._processing_instruction_text, $.text),
+      alias($._element_text, $.text),
       $.entity,
       $.text,
       $.element,

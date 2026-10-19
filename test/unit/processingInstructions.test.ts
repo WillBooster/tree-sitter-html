@@ -144,7 +144,7 @@ test('keeps instruction-looking text in RCDATA and respects closing tags and ent
 test('retains an unfinished instruction as an error without losing preceding markup', () => {
   const parser = new Parser().setLanguage(language);
   try {
-    for (const suffix of ['<?', '<?target', '<?target?', '<?target data']) {
+    for (const suffix of ['<?', '<?target', '<?target?', '<?target data', '<?xml', '<?XML', '<?xml-stylesheet']) {
       const tree = parser.parse(`<p>before</p>${suffix}`)!;
       try {
         expect(tree.rootNode.hasError, suffix).toBe(true);
@@ -167,6 +167,64 @@ test('preserves instruction-looking plaintext', () => {
     expect(tree.rootNode.descendantsOfType('text').map((node) => node.text)).toEqual(['<?target &amp; data?>']);
   } finally {
     tree.delete();
+    parser.delete();
+  }
+});
+
+test('preserves reserved and malformed instruction targets in quoted attribute values', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const value of ['<?XML?>', '<?xml', '<?xml-stylesheet', '<?1target?>', '<?target:part?>']) {
+      for (const quote of ['"', "'"]) {
+        const tree = parser.parse(`<p title=${quote}${value}${quote}>after</p>`)!;
+        try {
+          expect(tree.rootNode.hasError, value).toBe(false);
+          expect(tree.rootNode.descendantsOfType('attribute_value').map((node) => node.text)).toEqual([value]);
+          expect(tree.rootNode.descendantsOfType('comment')).toHaveLength(0);
+          expect(tree.rootNode.descendantsOfType('text').map((node) => node.text)).toEqual(['after']);
+        } finally {
+          tree.delete();
+        }
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});
+
+test('keeps non-closing markup as text across RCDATA references and raw-text content', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const tag of ['textarea', 'title', 'iframe', 'xmp', 'noembed', 'noframes']) {
+      for (const content of [
+        '<?target <b>tail?>',
+        '<?target &amp; <b>tail?>',
+        `<?target </${tag}x>tail?>`,
+        '<?target <!--tail-->',
+      ]) {
+        const source = `<${tag}>${content}</${tag}><p>after</p>`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+          expect(tree.rootNode.namedChildCount).toBe(2);
+          const element = tree.rootNode.firstNamedChild!;
+          expect(element.text).toBe(`<${tag}>${content}</${tag}>`);
+          expect(element.namedChildren.filter((node) => node.type === 'element')).toHaveLength(0);
+          expect(element.descendantsOfType('processing_instruction')).toHaveLength(0);
+          expect(element.descendantsOfType('comment')).toHaveLength(0);
+          expect(
+            element.namedChildren
+              .slice(1, -1)
+              .map((node) => node.text)
+              .join('')
+          ).toBe(content);
+          expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+        } finally {
+          tree.delete();
+        }
+      }
+    }
+  } finally {
     parser.delete();
   }
 });

@@ -14,7 +14,7 @@ enum TokenType {
     RAW_TEXT,
     COMMENT,
     PROCESSING_INSTRUCTION,
-    PROCESSING_INSTRUCTION_TEXT,
+    ELEMENT_TEXT,
 };
 
 typedef struct {
@@ -231,22 +231,13 @@ static inline int32_t ascii_upper(int32_t character) {
 }
 
 static bool is_html_whitespace(int32_t character);
+static bool is_raw_name_boundary(TSLexer *lexer);
 static bool scan_processing_instruction_target(TSLexer *lexer);
 static bool tag_uses_text_tokenization(const Tag *tag);
 
-static bool scan_processing_instruction(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
-    const Tag *tag = top_tag(scanner);
-    if (tag_uses_text_tokenization(tag)) {
-        if (!valid_symbols[PROCESSING_INSTRUCTION_TEXT]) {
-            return false;
-        }
-        bool rcdata = tag->type == TEXTAREA || tag->type == TITLE;
-        while (!lexer->eof(lexer) && lexer->lookahead != '<' && !(rcdata && lexer->lookahead == '&')) {
-            advance(lexer);
-        }
-        lexer->mark_end(lexer);
-        lexer->result_symbol = PROCESSING_INSTRUCTION_TEXT;
-        return true;
+static bool scan_processing_instruction(TSLexer *lexer, const bool *valid_symbols) {
+    if (!valid_symbols[PROCESSING_INSTRUCTION]) {
+        return false;
     }
     advance(lexer);
     if (lexer->eof(lexer)) {
@@ -300,14 +291,41 @@ static bool scan_processing_instruction_target(TSLexer *lexer) {
         }
         advance(lexer);
     }
-    return valid && strcmp(target, "XML") != 0 && strcmp(target, "XML-STYLESHEET") != 0;
+    return valid && (lexer->eof(lexer) || (strcmp(target, "XML") != 0 && strcmp(target, "XML-STYLESHEET") != 0));
+}
+
+static bool scan_element_text(TSLexer *lexer, const Tag *tag) {
+    bool rcdata = tag->type == TEXTAREA || tag->type == TITLE;
+    bool plaintext = tag->type == CUSTOM && tag->custom_tag_name.size == 9 &&
+                     memcmp(tag->custom_tag_name.contents, "PLAINTEXT", 9) == 0;
+    bool consumed = false;
+    lexer->mark_end(lexer);
+    while (!lexer->eof(lexer) && !(rcdata && lexer->lookahead == '&')) {
+        if (lexer->lookahead == '<' && !plaintext) {
+            advance(lexer);
+            if (lexer->lookahead == '/') {
+                advance(lexer);
+                Tag closing_tag = tag_for_name(scan_tag_name(lexer));
+                bool closes = tag_eq(tag, &closing_tag) && (is_raw_name_boundary(lexer) || lexer->eof(lexer));
+                tag_free(&closing_tag);
+                if (closes) {
+                    break;
+                }
+            }
+        } else {
+            advance(lexer);
+        }
+        consumed = true;
+        lexer->mark_end(lexer);
+    }
+    lexer->result_symbol = ELEMENT_TEXT;
+    return consumed;
 }
 
 typedef enum { RAW_TEXT_NORMAL, RAW_TEXT_ESCAPED, RAW_TEXT_DOUBLE_ESCAPED } RawTextMode;
 
 static bool scan_raw_less_than(TSLexer *lexer, bool script, RawTextMode *mode);
 static bool scan_raw_name(TSLexer *lexer, const char *name);
-static bool is_raw_name_boundary(TSLexer *lexer);
 
 static bool scan_raw_text(Scanner *scanner, TSLexer *lexer) {
     if (scanner->tags.size == 0) {
@@ -532,8 +550,14 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return true;
     }
 
-    if (valid_symbols[RAW_TEXT] && !valid_symbols[START_TAG_NAME] && !valid_symbols[END_TAG_NAME]) {
+    bool in_content = !valid_symbols[START_TAG_NAME] && !valid_symbols[END_TAG_NAME];
+    if (valid_symbols[RAW_TEXT] && in_content) {
         return scan_raw_text(scanner, lexer);
+    }
+
+    if (valid_symbols[ELEMENT_TEXT] && in_content &&
+        tag_uses_text_tokenization(top_tag(scanner))) {
+        return scan_element_text(lexer, top_tag(scanner));
     }
 
     while (iswspace(lexer->lookahead)) {
@@ -565,14 +589,10 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
             }
 
             if (lexer->lookahead == '?') {
-                return scan_processing_instruction(scanner, lexer, valid_symbols);
+                return scan_processing_instruction(lexer, valid_symbols);
             }
 
-            if (valid_symbols[IMPLICIT_END_TAG]) {
-                return scan_implicit_end_tag(scanner, lexer);
-            }
-            break;
-
+            // fall through
         case '\0':
             if (valid_symbols[IMPLICIT_END_TAG]) {
                 return scan_implicit_end_tag(scanner, lexer);

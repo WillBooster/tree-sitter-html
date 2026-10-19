@@ -54,7 +54,7 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
-            "name": "_processing_instruction_text"
+            "name": "_element_text"
           },
           "named": true,
           "value": "text"
@@ -523,7 +523,7 @@
     },
     {
       "type": "SYMBOL",
-      "name": "_processing_instruction_text"
+      "name": "_element_text"
     }
   ],
   "inline": [],
