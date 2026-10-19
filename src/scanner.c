@@ -271,13 +271,30 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
     reverse_tag_runs(scanner, first_restored_run);
 }
 
+static inline int32_t ascii_upper(int32_t character);
+static void append_utf8(String *text, uint32_t character);
+
 static String scan_tag_name(TSLexer *lexer) {
     String tag_name = array_new();
     while (iswalnum(lexer->lookahead) || lexer->lookahead == '-' || lexer->lookahead == ':') {
-        array_push(&tag_name, towupper(lexer->lookahead));
+        append_utf8(&tag_name, ascii_upper(lexer->lookahead));
         advance(lexer);
     }
     return tag_name;
+}
+
+static void append_utf8(String *text, uint32_t character) {
+    if (character < 0x80) {
+        array_push(text, character);
+        return;
+    }
+    unsigned continuation_count = character < 0x800 ? 1 : character < 0x10000 ? 2 : 3;
+    uint8_t prefix = continuation_count == 1 ? 0xC0 : continuation_count == 2 ? 0xE0 : 0xF0;
+    array_push(text, prefix | (character >> (6 * continuation_count)));
+    while (continuation_count) {
+        continuation_count--;
+        array_push(text, 0x80 | ((character >> (6 * continuation_count)) & 0x3F));
+    }
 }
 
 static bool scan_comment(TSLexer *lexer, bool mark_end) {
@@ -436,6 +453,7 @@ static bool scan_processing_instruction_target(TSLexer *lexer) {
 }
 
 static bool scan_element_end(TSLexer *lexer, const Tag *tag);
+static bool scan_raw_name(TSLexer *lexer, const char *name, unsigned length);
 
 static bool scan_element_text(TSLexer *lexer, const Tag *tag, ElementTextMode mode) {
     bool consumed = false;
@@ -457,16 +475,24 @@ static bool scan_element_end(TSLexer *lexer, const Tag *tag) {
     advance(lexer);
     if (lexer->lookahead != '/') return false;
     advance(lexer);
-    Tag closing_tag = tag_for_name(scan_tag_name(lexer));
-    bool closes = tag_eq(tag, &closing_tag) && (is_raw_name_boundary(lexer) || lexer->eof(lexer));
-    tag_free(&closing_tag);
-    return closes;
+    const char *name = tag->custom_tag_name.contents;
+    unsigned length = tag->custom_tag_name.size;
+    if (tag->type != CUSTOM) {
+        for (unsigned i = 0; i < sizeof(TAG_TYPES_BY_TAG_NAME) / sizeof(TAG_TYPES_BY_TAG_NAME[0]); i++) {
+            const TagMapEntry *entry = &TAG_TYPES_BY_TAG_NAME[i];
+            if (entry->tag_type == tag->type) {
+                name = entry->tag_name;
+                length = strlen(name);
+                break;
+            }
+        }
+    }
+    return scan_raw_name(lexer, name, length) && (is_raw_name_boundary(lexer) || lexer->eof(lexer));
 }
 
 typedef enum { RAW_TEXT_NORMAL, RAW_TEXT_ESCAPED, RAW_TEXT_DOUBLE_ESCAPED } RawTextMode;
 
 static bool scan_raw_less_than(TSLexer *lexer, bool script, RawTextMode *mode);
-static bool scan_raw_name(TSLexer *lexer, const char *name);
 
 static bool scan_raw_text(Scanner *scanner, TSLexer *lexer) {
     if (scanner->tags.size == 0) {
@@ -511,7 +537,8 @@ static bool scan_raw_less_than(TSLexer *lexer, bool script, RawTextMode *mode) {
     advance(lexer);
     if (lexer->lookahead == '/') {
         advance(lexer);
-        if (!scan_raw_name(lexer, script ? "SCRIPT" : "STYLE") ||
+        const char *name = script ? "SCRIPT" : "STYLE";
+        if (!scan_raw_name(lexer, name, strlen(name)) ||
             !(is_raw_name_boundary(lexer) || lexer->eof(lexer))) {
             return false;
         }
@@ -523,17 +550,17 @@ static bool scan_raw_less_than(TSLexer *lexer, bool script, RawTextMode *mode) {
     }
     if (script && *mode == RAW_TEXT_NORMAL && lexer->lookahead == '!') {
         advance(lexer);
-        if (scan_raw_name(lexer, "--")) {
+        if (scan_raw_name(lexer, "--", 2)) {
             *mode = RAW_TEXT_ESCAPED;
         }
-    } else if (*mode == RAW_TEXT_ESCAPED && scan_raw_name(lexer, "SCRIPT") && is_raw_name_boundary(lexer)) {
+    } else if (*mode == RAW_TEXT_ESCAPED && scan_raw_name(lexer, "SCRIPT", 6) && is_raw_name_boundary(lexer)) {
         *mode = RAW_TEXT_DOUBLE_ESCAPED;
     }
     return false;
 }
 
-static bool scan_raw_name(TSLexer *lexer, const char *name) {
-    for (unsigned i = 0; name[i]; i++) {
+static bool scan_raw_name(TSLexer *lexer, const char *name, unsigned length) {
+    for (unsigned i = 0; i < length; i++) {
         if (ascii_upper(lexer->lookahead) != name[i]) {
             return false;
         }

@@ -372,3 +372,55 @@ test('retains foreign text context after deep ancestors exceed scanner storage',
     parser.delete();
   }
 });
+
+test('ends text elements only at ASCII-matching closing names', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const [tag, lookalike] of [
+      ['title', 'tıtle'],
+      ['title', 'tŉtle'],
+      ['iframe', 'ıframe'],
+      ['noframes', 'noframeſ'],
+    ]) {
+      const content = `before</${lookalike}>&amp;<?target?>after`;
+      const source = `<${tag}>${content}</${tag!.toUpperCase()}><p>following</p>`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(false);
+        expect(tree.rootNode.namedChildCount, source).toBe(2);
+        expect(tree.rootNode.firstNamedChild?.text, source).toBe(`<${tag}>${content}</${tag!.toUpperCase()}>`);
+        expect(tree.rootNode.descendantsOfType('processing_instruction'), source).toHaveLength(0);
+        expect(tree.rootNode.descendantsOfType('erroneous_end_tag'), source).toHaveLength(0);
+        expect(tree.rootNode.lastNamedChild?.text, source).toBe('<p>following</p>');
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});
+
+test('keeps Unicode lookalike element names out of text-only modes', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const tag of ['tıtle', 'tŉtle', 'ıframe', 'noframeſ', 'tıtlé']) {
+      const source = `<${tag}><?target?></${tag}><p>following</p>`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(false);
+        expect(tree.rootNode.namedChildCount, source).toBe(2);
+        expect(tree.rootNode.firstNamedChild?.text, source).toBe(`<${tag}><?target?></${tag}>`);
+        expect(
+          tree.rootNode.descendantsOfType('processing_instruction').map((node) => node.text),
+          source
+        ).toEqual(['<?target?>']);
+        expect(tree.rootNode.lastNamedChild?.text, source).toBe('<p>following</p>');
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});
