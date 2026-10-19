@@ -20,7 +20,7 @@ number, so it loads only with the WillBooster runtime, version 2.x
 it. Input that contains NUL characters can parse to a different tree than with upstream's 0.23.2 parser, because the
 lexers that generator emits treat a NUL character as an ordinary character. This grammar also accepts literal `>`
 characters and bare `&` in text nodes, which upstream 0.23.2 rejects. A bare `&` becomes its own `text` node beside
-surrounding text, while character references remain `entity` nodes. Text nodes include leading, trailing, and whitespace-only content, including whitespace between markup and character references. Processing instructions use source-preserving
+surrounding text, while character references remain `entity` nodes. Text nodes include leading, trailing, and whitespace-only content, including whitespace between markup and character references. A DOCTYPE declaration exposes its uninterpreted body as a `doctype_value` child, including legacy PUBLIC or SYSTEM identifiers. Processing instructions use source-preserving
 `processing_instruction` nodes and directive highlights. In HTML-namespace `title` and `textarea`, tags, comments,
 and instructions stay `text`, while character references remain `entity` nodes. Content inside `iframe`, `xmp`,
 `noembed`, and `noframes` also stays `text` up to the element's own closing tag. `plaintext` retains all remaining
