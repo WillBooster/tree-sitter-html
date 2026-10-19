@@ -21,7 +21,10 @@ it. Input that contains NUL characters can parse to a different tree than with u
 lexers that generator emits treat a NUL character as an ordinary character. This grammar also accepts literal `>`
 characters and bare `&` in text nodes, which upstream 0.23.2 rejects. A bare `&` becomes its own `text` node beside
 surrounding text, while character references remain `entity` nodes. Text nodes include leading, trailing, and whitespace-only content, including whitespace between markup and character references. A DOCTYPE declaration exposes its uninterpreted body as a `doctype_value` child, including legacy PUBLIC or SYSTEM identifiers. Processing instructions use source-preserving
-`processing_instruction` nodes and directive highlights. In HTML-namespace `title` and `textarea`, tags, comments,
+`processing_instruction` nodes and directive highlights. Delimited `xml` and `xml-stylesheet` targets in any ASCII
+case, including XML declarations, and malformed targets produce `comment` nodes. Valid targets start with an ASCII
+letter or `_` and continue with ASCII letters, digits, `-` or `_`. A valid-target instruction without a closing `>`
+reports an error. In HTML-namespace `title` and `textarea`, tags, comments,
 and instructions stay `text`, while character references remain `entity` nodes. Content inside `iframe`, `xmp`,
 `noembed`, and `noframes` also stays `text` up to the element's own closing tag. `plaintext` retains all remaining
 input as `text`, including closing tags. The grammar's scanner requires an HTML tag-name boundary after
@@ -31,7 +34,7 @@ HTML escaped and double-escaped states, so closing-tag text inside a double esca
 EOF while scanning raw content closes implicitly without an error: its `script_element` has no `end_tag` child, and its
 remaining content stays available for JavaScript injection. Incomplete closing tags such as `</script` still report
 recovery errors. Unterminated style elements still report an error. Void elements close
-before following text, entities, and complete comments, which become siblings instead of children.
+before following text, entities, complete comments, and processing instructions, which become siblings instead of children.
 Scanner serialization stores the open-tag stack from its innermost tag, compressing runs of identical tags, so active
 void, script, and style elements retain their identities when deeply nested. When distinct tags exceed the fixed-size
 buffer, serialization prioritizes inner tags and outer namespace boundaries, replacing ordinary outer tags with unknown
