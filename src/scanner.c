@@ -18,6 +18,8 @@ enum TokenType {
     UNFINISHED_PROCESSING_INSTRUCTION,
 };
 
+typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH } Namespace;
+
 typedef struct {
     Tag tag;
     unsigned count;
@@ -26,7 +28,11 @@ typedef struct {
 // Consecutive identical open tags share one run, so deep repeated nesting stays cheap to scan, serialize, and restore.
 typedef struct {
     Array(TagRun) tags;
+    Namespace omitted_namespace;
 } Scanner;
+
+static Namespace child_namespace(Namespace current, const Tag *tag);
+static Namespace namespace_after_tag(Namespace current, const Tag *tag);
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -54,6 +60,7 @@ static void pop_tag(Scanner *scanner) {
     if (--top->count == 0) {
         tag_free(&top->tag);
         scanner->tags.size--;
+        if (scanner->tags.size == 0) scanner->omitted_namespace = NAMESPACE_HTML;
     }
 }
 
@@ -62,6 +69,7 @@ static void clear_tags(Scanner *scanner) {
         tag_free(&scanner->tags.contents[i].tag);
     }
     array_clear(&scanner->tags);
+    scanner->omitted_namespace = NAMESPACE_HTML;
 }
 
 // Follows a serialized tag to repeat it the number of times in the next two bytes; no tag type uses this byte.
@@ -117,6 +125,7 @@ static unsigned serialize(Scanner *scanner, char *buffer) {
     unsigned size = sizeof(serialized_tag_count);
     memcpy(&buffer[size], &tag_count, sizeof(tag_count));
     size += sizeof(tag_count);
+    unsigned namespace_offset = size++;
 
     for (unsigned i = scanner->tags.size; i > 0 && serialized_tag_count < tag_count; i--) {
         const TagRun *run = &scanner->tags.contents[i - 1];
@@ -128,6 +137,19 @@ static unsigned serialize(Scanner *scanner, char *buffer) {
         }
     }
 
+    Namespace boundary = scanner->omitted_namespace;
+    unsigned omitted = depth - serialized_tag_count;
+    for (unsigned i = 0; i < scanner->tags.size && omitted > 0; i++) {
+        const TagRun *run = &scanner->tags.contents[i];
+        unsigned count = MIN(run->count, omitted);
+        for (unsigned j = 0; j < count; j++) {
+            Namespace next = namespace_after_tag(boundary, &run->tag);
+            if (next == boundary) break;
+            boundary = next;
+        }
+        omitted -= count;
+    }
+    buffer[namespace_offset] = (char)boundary;
     memcpy(&buffer[0], &serialized_tag_count, sizeof(serialized_tag_count));
     return size;
 }
@@ -164,6 +186,7 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
     size += sizeof(serialized_tag_count);
     memcpy(&tag_count, &buffer[size], sizeof(tag_count));
     size += sizeof(tag_count);
+    scanner->omitted_namespace = (Namespace)(uint8_t)buffer[size++];
 
     if (tag_count > serialized_tag_count) {
         push_tags(scanner, tag_new(), tag_count - serialized_tag_count);
@@ -287,12 +310,8 @@ static ElementTextMode classify_element_text(const Tag *tag) {
     return ELEMENT_TEXT_NONE;
 }
 
-typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH } Namespace;
-
-static Namespace child_namespace(Namespace current, const Tag *tag);
-
 static bool in_html_namespace(const Scanner *scanner) {
-    Namespace current = NAMESPACE_HTML;
+    Namespace current = scanner->omitted_namespace;
     for (unsigned i = 0; i < scanner->tags.size; i++) {
         const TagRun *run = &scanner->tags.contents[i];
         if (current == NAMESPACE_HTML) {
@@ -305,6 +324,14 @@ static bool in_html_namespace(const Scanner *scanner) {
         current = child_namespace(current, &run->tag);
     }
     return current == NAMESPACE_HTML;
+}
+
+static Namespace namespace_after_tag(Namespace current, const Tag *tag) {
+    if (current == NAMESPACE_HTML) {
+        if (tag->type == SVG) current = NAMESPACE_SVG;
+        if (tag->type == MATH) current = NAMESPACE_MATH;
+    }
+    return child_namespace(current, tag);
 }
 
 static Namespace child_namespace(Namespace current, const Tag *tag) {

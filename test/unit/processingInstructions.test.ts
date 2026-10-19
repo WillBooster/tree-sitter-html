@@ -320,3 +320,49 @@ test('bounds recovery work for repeated unfinished instructions and completes th
     parser.delete();
   }
 });
+
+test('retains foreign text context after deep ancestors exceed scanner storage', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const [prefix, suffix] of [
+      ['<svg>', '</svg>'],
+      ['<math>', '</math>'],
+      ['<svg><foreignObject><svg>', '</svg></foreignObject></svg>'],
+    ]) {
+      const source = `${prefix}${'<g><g-x>'.repeat(200)}<title><!--label--><?target?>icon</title>${'</g-x></g>'.repeat(200)}${suffix}<p>after</p>`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.descendantsOfType('comment').map((node) => node.text)).toEqual(['<!--label-->']);
+        expect(tree.rootNode.descendantsOfType('processing_instruction').map((node) => node.text)).toEqual([
+          '<?target?>',
+        ]);
+        expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+        const index = source.indexOf('label');
+        tree.edit(
+          new Edit({
+            startIndex: index,
+            oldEndIndex: index + 5,
+            newEndIndex: index + 5,
+            startPosition: { row: 0, column: index },
+            oldEndPosition: { row: 0, column: index + 5 },
+            newEndPosition: { row: 0, column: index + 5 },
+          })
+        );
+        const edited = source.replace('label', 'other');
+        const incremental = parser.parse(edited, tree)!;
+        const fresh = parser.parse(edited)!;
+        try {
+          expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
+          expect(incremental.rootNode.descendantsOfType('comment').map((node) => node.text)).toEqual(['<!--other-->']);
+        } finally {
+          incremental.delete();
+          fresh.delete();
+        }
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});
