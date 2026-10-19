@@ -6,7 +6,7 @@ from urllib.request import urlopen
 source = 'https://html.spec.whatwg.org/entities.json'
 with urlopen(source) as response:
     entities = json.load(response)
-names = sorted({name[1:].removesuffix(';') for name in entities})
+names = sorted({name[1:].rstrip(';') for name in entities})
 lines = [
     '#ifndef TREE_SITTER_HTML_ENTITIES_H_',
     '#define TREE_SITTER_HTML_ENTITIES_H_',

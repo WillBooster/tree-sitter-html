@@ -150,7 +150,7 @@ afterwards.
 CI also runs these tests on Linux arm64 and macOS, where the CLI compiles the parser and the scanner natively, and fuzzes
 both with libFuzzer and sanitizers (`.github/workflows/robustness.yml`).
 
-Run `script/generate-entities` with Python 3 when refreshing the HTML Standard's named-reference data, then regenerate
+Run `script/generate-entities` with Python 3.8 or later when refreshing the HTML Standard's named-reference data, then regenerate
 and commit `src/`. The command reads the official `entities.json` over HTTPS.
 
 ### References
