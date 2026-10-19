@@ -382,8 +382,11 @@
       "value": "[^<>\"'=\\s]+"
     },
     "entity": {
-      "type": "PATTERN",
-      "value": "&(#([xX][0-9a-fA-F]+|[0-9]+)|[A-Za-z][A-Za-z0-9]*);?"
+      "type": "TOKEN",
+      "content": {
+        "type": "PATTERN",
+        "value": "&(#([xX][0-9a-fA-F]+|[0-9]+)|[A-Za-z][A-Za-z0-9]*);?"
+      }
     },
     "quoted_attribute_value": {
       "type": "CHOICE",
@@ -451,8 +454,11 @@
       ]
     },
     "text": {
-      "type": "PATTERN",
-      "value": "[^<&\\s]([^<&]*[^<&\\s])?|&"
+      "type": "IMMEDIATE_TOKEN",
+      "content": {
+        "type": "PATTERN",
+        "value": "[^<&]+|&"
+      }
     }
   },
   "extras": [

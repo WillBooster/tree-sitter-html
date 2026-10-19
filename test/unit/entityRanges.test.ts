@@ -27,9 +27,9 @@ test('queries complete named and numeric character-reference ranges', () => {
         expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([reference]);
         expect(tree.rootNode.firstNamedChild?.namedChildren.map((node) => node.text)).toEqual([
           '<p>',
-          'before',
+          'before ',
           reference,
-          'after',
+          ' after',
           '</p>',
         ]);
         expect(tree.rootNode.lastNamedChild?.text).toBe('<br>');

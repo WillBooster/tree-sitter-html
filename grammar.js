@@ -126,13 +126,13 @@ module.exports = grammar({
 
     attribute_value: _ => /[^<>"'=\s]+/,
 
-    entity: _ => /&(#([xX][0-9a-fA-F]+|[0-9]+)|[A-Za-z][A-Za-z0-9]*);?/,
+    entity: _ => token(/&(#([xX][0-9a-fA-F]+|[0-9]+)|[A-Za-z][A-Za-z0-9]*);?/),
 
     quoted_attribute_value: $ => choice(
       seq('\'', optional(alias(/[^']+/, $.attribute_value)), '\''),
       seq('"', optional(alias(/[^"]+/, $.attribute_value)), '"'),
     ),
 
-    text: _ => /[^<&\s]([^<&]*[^<&\s])?|&/,
+    text: _ => token.immediate(/[^<&]+|&/),
   },
 });
