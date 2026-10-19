@@ -38,6 +38,11 @@
     }
   },
   {
+    "type": "doctype_value",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "document",
     "named": true,
     "root": true,
@@ -305,10 +310,6 @@
   {
     "type": "doctype",
     "named": false
-  },
-  {
-    "type": "doctype_value",
-    "named": true
   },
   {
     "type": "entity",

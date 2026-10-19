@@ -40,7 +40,7 @@ module.exports = grammar({
 
     _doctype: _ => /[Dd][Oo][Cc][Tt][Yy][Pp][Ee]/,
 
-    doctype_value: _ => /[^>]+/,
+    doctype_value: _ => repeat1(/[^>]+/),
 
     _node: $ => choice(
       $.doctype,

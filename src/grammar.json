@@ -40,8 +40,11 @@
       "value": "[Dd][Oo][Cc][Tt][Yy][Pp][Ee]"
     },
     "doctype_value": {
-      "type": "PATTERN",
-      "value": "[^>]+"
+      "type": "REPEAT1",
+      "content": {
+        "type": "PATTERN",
+        "value": "[^>]+"
+      }
     },
     "_node": {
       "type": "CHOICE",

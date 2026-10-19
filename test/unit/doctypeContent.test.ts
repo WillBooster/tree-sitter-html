@@ -63,3 +63,41 @@ test.each([
     tree.delete();
   }
 });
+
+test.each(['doctype', 'DOCTYPE'])('retains an erroneous %s declaration while its body is empty', (keyword) => {
+  const source = `<!${keyword}><p>after</p>`;
+  const tree = parser.parse(source)!;
+  try {
+    expect(tree.rootNode.hasError).toBe(true);
+    const doctype = tree.rootNode.firstNamedChild!;
+    expect(doctype.type).toBe('doctype');
+    expect(doctype.text).toBe(`<!${keyword}>`);
+    expect(doctype.namedChildren.map((node) => [node.type, node.text, node.hasError])).toEqual([
+      ['doctype_value', '', true],
+    ]);
+    expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+    tree.edit(
+      new Edit({
+        startIndex: 9,
+        oldEndIndex: 9,
+        newEndIndex: 14,
+        startPosition: { row: 0, column: 9 },
+        oldEndPosition: { row: 0, column: 9 },
+        newEndPosition: { row: 0, column: 14 },
+      })
+    );
+    const edited = source.slice(0, 9) + ' html' + source.slice(9);
+    const incremental = parser.parse(edited, tree)!;
+    const fresh = parser.parse(edited)!;
+    try {
+      expect(incremental.rootNode.hasError).toBe(false);
+      expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
+      expect(incremental.rootNode.firstNamedChild?.firstNamedChild?.text).toBe(' html');
+    } finally {
+      incremental.delete();
+      fresh.delete();
+    }
+  } finally {
+    tree.delete();
+  }
+});
