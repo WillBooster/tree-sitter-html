@@ -56,6 +56,7 @@ module.exports = grammar({
       $.comment,
       $.entity,
       $.text,
+      alias('&', $.text),
       $.element,
       $.script_element,
       $.style_element,
@@ -164,6 +165,6 @@ module.exports = grammar({
       )), $.attribute_value)), '"'),
     ),
 
-    text: _ => token.immediate(/[^<&]+|&/),
+    text: _ => token(prec(1, /[^<&]+/)),
   },
 });
