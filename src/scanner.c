@@ -882,6 +882,8 @@ static bool is_unquoted_attribute_content(int32_t character) {
            character != '=' && character != '&';
 }
 
+// This lookahead consumes input: callers must mark the token end first.
+// The implicit-end path inherits that boundary from scan_markup_open.
 static bool accepts_tag_suffix(TSLexer *lexer, bool closing) {
     bool has_attribute_separator = iswspace(lexer->lookahead);
     while (iswspace(lexer->lookahead)) {
@@ -923,6 +925,7 @@ static bool accepts_tag_suffix(TSLexer *lexer, bool closing) {
         previous = lexer->lookahead;
         advance(lexer);
     }
+    // An unfinished start at EOF cannot discard a later ancestor end.
     return !closing;
 }
 
