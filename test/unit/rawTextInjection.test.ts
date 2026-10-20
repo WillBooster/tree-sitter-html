@@ -209,3 +209,79 @@ test('self-closes foreign raw-element names and retains HTML raw text at integra
     parser.delete();
   }
 });
+
+test('retains raw content at encoding-dependent MathML integration points', () => {
+  const parser = new Parser().setLanguage(language);
+  const query = new Query(language, querySource);
+  try {
+    for (const attributes of [
+      'encoding="text/html"',
+      "ENCODING = 'APPLICATION/XHTML+XML'",
+      'id=x encoding=text/html',
+      'encoding="text&sol;html"',
+      'encoding="application&#x2F;xhtml&plus;xml"',
+      'encoding="t&#00000000000000000000000000101;xt/html"',
+      'encoding="text/html" encoding="application/xml"',
+    ]) {
+      const source = `<math><annotation-xml ${attributes}><script/>if(a<b)c()</script><style/>a>b{color:red}</style></annotation-xml></math><p>after</p>`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(false);
+        expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+        expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual(['if(a<b)c()', 'a>b{color:red}']);
+      } finally {
+        tree.delete();
+      }
+    }
+    for (const attributes of [
+      '',
+      'encoding="application/xml"',
+      'encoding="text/html "',
+      'encoding=text/html/',
+      'encoding="application/xml" encoding="text/html"',
+      'encoding encoding="text/html"',
+    ]) {
+      const source = `<math><annotation-xml ${attributes}><script/><style/></annotation-xml></math><p>after</p>`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(false);
+        expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+        expect(tree.rootNode.descendantsOfType('self_closing_tag')).toHaveLength(2);
+        expect(query.captures(tree.rootNode)).toHaveLength(0);
+      } finally {
+        tree.delete();
+      }
+    }
+    const source =
+      '<math><annotation-xml encoding="text/html"><script>body</script></annotation-xml></math><p>after</p>';
+    const start = source.indexOf('text/html');
+    const before = parser.parse(source)!;
+    const replacement = 'application/xml';
+    before.edit(
+      new Edit({
+        startIndex: start,
+        oldEndIndex: start + 'text/html'.length,
+        newEndIndex: start + replacement.length,
+        startPosition: { row: 0, column: start },
+        oldEndPosition: { row: 0, column: start + 'text/html'.length },
+        newEndPosition: { row: 0, column: start + replacement.length },
+      })
+    );
+    const updatedSource = source.replace('text/html', replacement);
+    const incremental = parser.parse(updatedSource, before)!;
+    const fresh = parser.parse(updatedSource)!;
+    try {
+      expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
+      expect(incremental.rootNode.hasError).toBe(false);
+      expect(incremental.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+      expect(query.captures(incremental.rootNode)).toHaveLength(0);
+    } finally {
+      before.delete();
+      incremental.delete();
+      fresh.delete();
+    }
+  } finally {
+    query.delete();
+    parser.delete();
+  }
+});

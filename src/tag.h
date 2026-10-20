@@ -29,6 +29,7 @@ typedef enum {
     END_OF_VOID_TAGS,
 
     A,
+    ANNOTATION_XML,
     ABBR,
     ADDRESS,
     ARTICLE,
@@ -131,6 +132,7 @@ typedef enum {
     VAR,
     VIDEO,
 
+    ANNOTATION_XML_HTML,
     CUSTOM,
 
     END_,
@@ -148,7 +150,8 @@ typedef struct {
     String custom_tag_name;
 } Tag;
 
-static const TagMapEntry TAG_TYPES_BY_TAG_NAME[126] = {
+static const TagMapEntry TAG_TYPES_BY_TAG_NAME[] = {
+    {"ANNOTATION-XML", ANNOTATION_XML},
     {"AREA",       AREA      },
     {"BASE",       BASE      },
     {"BASEFONT",   BASEFONT  },
@@ -285,7 +288,7 @@ static const TagType TAG_TYPES_NOT_ALLOWED_IN_PARAGRAPHS[] = {
 };
 
 static TagType tag_type_for_name(const String *tag_name) {
-    for (int i = 0; i < 126; i++) {
+    for (unsigned i = 0; i < sizeof(TAG_TYPES_BY_TAG_NAME) / sizeof(TAG_TYPES_BY_TAG_NAME[0]); i++) {
         const TagMapEntry *entry = &TAG_TYPES_BY_TAG_NAME[i];
         if (
             strlen(entry->tag_name) == tag_name->size &&
@@ -326,7 +329,9 @@ static inline bool tag_is_void(const Tag *self) {
 }
 
 static inline bool tag_eq(const Tag *self, const Tag *other) {
-    if (self->type != other->type) return false;
+    TagType self_type = self->type == ANNOTATION_XML_HTML ? ANNOTATION_XML : self->type;
+    TagType other_type = other->type == ANNOTATION_XML_HTML ? ANNOTATION_XML : other->type;
+    if (self_type != other_type) return false;
     if (self->type == CUSTOM) {
         if (self->custom_tag_name.size != other->custom_tag_name.size) {
             return false;
