@@ -47,6 +47,7 @@ static bool scan_contiguous_attribute_content(TSLexer *lexer, const bool *valid_
 static bool scan_unquoted_attribute_fragment(TSLexer *lexer);
 static bool is_unquoted_attribute_content(int32_t character);
 static bool is_attribute_whitespace(int32_t character);
+static bool accepts_tag_suffix(TSLexer *lexer, bool closing);
 
 static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
 
@@ -466,12 +467,20 @@ static bool scan_processing_instruction_target(TSLexer *lexer) {
 static bool scan_element_end(TSLexer *lexer, const Tag *tag);
 static bool scan_raw_name(TSLexer *lexer, const char *name, unsigned length);
 
-static bool scan_element_text(TSLexer *lexer, const Tag *tag, ElementTextMode mode) {
+static bool scan_element_text(Scanner *scanner, TSLexer *lexer, ElementTextMode mode, bool can_end) {
+    const Tag *tag = top_tag(scanner);
     bool consumed = false;
     lexer->mark_end(lexer);
     while (!lexer->eof(lexer) && !(mode == ELEMENT_TEXT_RCDATA && lexer->lookahead == '&')) {
         if (lexer->lookahead == '<' && mode != ELEMENT_TEXT_PLAINTEXT) {
-            if (scan_element_end(lexer, tag)) break;
+            if (scan_element_end(lexer, tag)) {
+                if (!consumed && can_end && !accepts_tag_suffix(lexer, true)) {
+                    pop_tag(scanner);
+                    lexer->result_symbol = IMPLICIT_END_TAG;
+                    return true;
+                }
+                break;
+            }
         } else {
             advance(lexer);
         }
@@ -591,6 +600,10 @@ static bool is_html_whitespace(int32_t character) {
 static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     Tag *parent = top_tag(scanner);
 
+    if (parent && parent->type == STYLE && lexer->eof(lexer)) {
+        return false;
+    }
+
     bool is_closing_tag = false;
     if (lexer->lookahead == '/') {
         is_closing_tag = true;
@@ -613,8 +626,14 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
 
     if (is_closing_tag) {
         if (parent && tag_eq(parent, &next_tag)) {
+            bool close_raw = (parent->type == SCRIPT || parent->type == STYLE) &&
+                             !accepts_tag_suffix(lexer, true);
             tag_free(&next_tag);
-            return false;
+            if (close_raw) {
+                pop_tag(scanner);
+                lexer->result_symbol = IMPLICIT_END_TAG;
+            }
+            return close_raw;
         }
 
         for (unsigned i = scanner->tags.size; i > 0; i--) {
@@ -649,6 +668,12 @@ static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
         return false;
     }
 
+    lexer->mark_end(lexer);
+    if (!accepts_tag_suffix(lexer, false)) {
+        array_delete(&tag_name);
+        return false;
+    }
+
     Tag tag = tag_for_name(tag_name);
     push_tags(scanner, tag, 1);
     switch (tag.type) {
@@ -673,8 +698,13 @@ static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer, bool valid_end_t
         return false;
     }
 
-    if (!valid_end_tag) {
-        lexer->mark_end(lexer);
+    lexer->mark_end(lexer);
+    if (valid_end_tag) {
+        if (!accepts_tag_suffix(lexer, true)) {
+            array_delete(&tag_name);
+            return false;
+        }
+    } else {
         while (iswspace(lexer->lookahead)) {
             advance(lexer);
         }
@@ -739,7 +769,7 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
 
     ElementTextMode mode;
     if (valid_symbols[ELEMENT_TEXT] && in_content && (mode = element_text_mode(scanner)) != ELEMENT_TEXT_NONE) {
-        return scan_element_text(lexer, top_tag(scanner), mode);
+        return scan_element_text(scanner, lexer, mode, valid_symbols[IMPLICIT_END_TAG]);
     }
 
     if (scan_contiguous_attribute_content(lexer, valid_symbols)) {
@@ -786,7 +816,8 @@ static bool scan_tag_syntax(Scanner *scanner, TSLexer *lexer, const bool *valid_
             break;
 
         case '/':
-            if (valid_symbols[SELF_CLOSING_TAG_DELIMITER]) {
+            if (valid_symbols[SELF_CLOSING_TAG_DELIMITER] && !valid_symbols[START_TAG_NAME] &&
+                !valid_symbols[END_TAG_NAME]) {
                 return scan_self_closing_tag_delimiter(scanner, lexer);
             }
             break;
@@ -849,6 +880,53 @@ static bool is_unquoted_attribute_content(int32_t character) {
     return !is_attribute_whitespace(character) &&
            character != '<' && character != '>' && character != '"' && character != '\'' &&
            character != '=' && character != '&';
+}
+
+// This lookahead consumes input: callers must mark the token end first.
+// The implicit-end path inherits that boundary from scan_markup_open.
+static bool accepts_tag_suffix(TSLexer *lexer, bool closing) {
+    bool has_attribute_separator = iswspace(lexer->lookahead);
+    while (iswspace(lexer->lookahead)) {
+        advance(lexer);
+    }
+    if (closing && (lexer->lookahead == '&' || lexer->eof(lexer))) {
+        return true;
+    }
+    int32_t quote = 0;
+    int32_t previous = 0;
+    bool value_start = false;
+    bool attribute_component = false;
+    bool unseparated_attribute_syntax = false;
+    while (!lexer->eof(lexer)) {
+        if (quote) {
+            if (lexer->lookahead == quote) {
+                quote = 0;
+                attribute_component = true;
+            }
+        } else if (value_start && (lexer->lookahead == '\'' || lexer->lookahead == '"')) {
+            quote = lexer->lookahead;
+            value_start = false;
+        } else if (lexer->lookahead == '>') {
+            return !closing || previous != '/';
+        } else if (lexer->lookahead == '<') {
+            return !closing && (attribute_component || value_start || unseparated_attribute_syntax);
+        } else if (lexer->lookahead == '=') {
+            value_start = true;
+            attribute_component = false;
+            unseparated_attribute_syntax = !has_attribute_separator;
+        } else if (iswspace(lexer->lookahead)) {
+            has_attribute_separator = true;
+            attribute_component = false;
+        } else {
+            attribute_component = has_attribute_separator || attribute_component || value_start ||
+                                  (lexer->lookahead != '/' && lexer->lookahead != '&');
+            value_start = false;
+        }
+        previous = lexer->lookahead;
+        advance(lexer);
+    }
+    // An unfinished start at EOF cannot discard a later ancestor end.
+    return !closing;
 }
 
 static bool is_attribute_whitespace(int32_t character) {
