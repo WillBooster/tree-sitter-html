@@ -676,6 +676,10 @@ static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
 
     Tag tag = tag_for_name(tag_name);
     push_tags(scanner, tag, 1);
+    if (!in_html_namespace(scanner)) {
+        lexer->result_symbol = START_TAG_NAME;
+        return true;
+    }
     switch (tag.type) {
         case SCRIPT:
             lexer->result_symbol = SCRIPT_START_TAG_NAME;
@@ -730,8 +734,11 @@ static bool scan_self_closing_tag_delimiter(Scanner *scanner, TSLexer *lexer) {
     advance(lexer);
     if (lexer->lookahead == '>') {
         advance(lexer);
-        if (scanner->tags.size > 0) {
-            pop_tag(scanner);
+        Tag *tag = top_tag(scanner);
+        if (tag) {
+            if ((tag->type != SCRIPT && tag->type != STYLE) || !in_html_namespace(scanner)) {
+                pop_tag(scanner);
+            }
             lexer->result_symbol = SELF_CLOSING_TAG_DELIMITER;
         }
         return true;

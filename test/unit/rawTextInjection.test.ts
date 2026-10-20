@@ -117,3 +117,95 @@ test('preserves script injection through EOF and adding a real closing tag', () 
     parser.delete();
   }
 });
+
+for (const tag of ['script', 'style']) {
+  test(`keeps ${tag} content inside slash-suffixed opening tags`, () => {
+    const parser = new Parser().setLanguage(language);
+    const query = new Query(language, querySource);
+    try {
+      for (const opener of [`<${tag}>`, `<${tag.toUpperCase()} data-value="a/b">`, `<${tag} data-value=plain >`]) {
+        const content = `<${tag}>still raw</${tag}X><b>inside</b>`;
+        const suffix = `</${tag}><p>after</p>`;
+        const source = opener + content + suffix;
+        const insertion = opener.length - 1;
+        const updatedSource = source.slice(0, insertion) + '/' + source.slice(insertion);
+        const before = parser.parse(source)!;
+        before.edit(
+          new Edit({
+            startIndex: insertion,
+            oldEndIndex: insertion,
+            newEndIndex: insertion + 1,
+            startPosition: { row: 0, column: insertion },
+            oldEndPosition: { row: 0, column: insertion },
+            newEndPosition: { row: 0, column: insertion + 1 },
+          })
+        );
+        const incremental = parser.parse(updatedSource, before)!;
+        const fresh = parser.parse(updatedSource)!;
+        try {
+          expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
+          for (const tree of [fresh, incremental]) {
+            expect(tree.rootNode.hasError, updatedSource).toBe(false);
+            expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual([`${tag}_element`, 'element']);
+            expect(tree.rootNode.firstNamedChild?.firstNamedChild?.text).toBe(
+              updatedSource.slice(0, opener.length + 1)
+            );
+            expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+            expect(
+              query.captures(tree.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
+            ).toEqual([[content, opener.length + 1, opener.length + 1 + content.length]]);
+          }
+        } finally {
+          fresh.delete();
+          incremental.delete();
+          before.delete();
+        }
+      }
+    } finally {
+      query.delete();
+      parser.delete();
+    }
+  });
+}
+
+test('self-closes foreign raw-element names and retains HTML raw text at integration points', () => {
+  const parser = new Parser().setLanguage(language);
+  const query = new Query(language, querySource);
+  try {
+    for (const [prefix, suffix] of [
+      ['<svg>', '</svg>'],
+      ['<math>', '</math>'],
+      ['<svg><foreignObject><svg>', '</svg></foreignObject></svg>'],
+    ]) {
+      const tree = parser.parse(`${prefix}<script/><style/><path/>${suffix}<p>after</p>`)!;
+      try {
+        expect(tree.rootNode.hasError).toBe(false);
+        expect(tree.rootNode.descendantsOfType('self_closing_tag').map((node) => node.text)).toEqual([
+          '<script/>',
+          '<style/>',
+          '<path/>',
+        ]);
+        expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+        expect(query.captures(tree.rootNode)).toHaveLength(0);
+      } finally {
+        tree.delete();
+      }
+    }
+    for (const [prefix, suffix] of [
+      ['<svg><foreignObject>', '</foreignObject></svg>'],
+      ['<math><mtext>', '</mtext></math>'],
+    ]) {
+      const tree = parser.parse(`${prefix}<script/>let a = 1;</script>${suffix}<p>after</p>`)!;
+      try {
+        expect(tree.rootNode.hasError).toBe(false);
+        expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+        expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual(['let a = 1;']);
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
+    query.delete();
+    parser.delete();
+  }
+});

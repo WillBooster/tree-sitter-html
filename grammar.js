@@ -95,14 +95,14 @@ module.exports = grammar({
       '<',
       alias($._script_start_tag_name, $.tag_name),
       repeat($.attribute),
-      '>',
+      choice('>', '/>'),
     ),
 
     style_start_tag: $ => seq(
       '<',
       alias($._style_start_tag_name, $.tag_name),
       repeat($.attribute),
-      '>',
+      choice('>', '/>'),
     ),
 
     self_closing_tag: $ => seq(
