@@ -1,6 +1,7 @@
 #include "tag.h"
 #include "tree_sitter/parser.h"
 #include "attributeEntity.h"
+#include "tagAttributes.h"
 
 #include <wctype.h>
 
@@ -23,7 +24,7 @@ enum TokenType {
     UNQUOTED_ATTRIBUTE_FRAGMENT,
 };
 
-typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH } Namespace;
+typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH, NAMESPACE_MATH_ANNOTATION } Namespace;
 
 typedef struct {
     Tag tag;
@@ -37,6 +38,7 @@ typedef struct {
 } Scanner;
 
 static Namespace child_namespace(Namespace current, const Tag *tag);
+static Namespace tag_namespace(Namespace current, const Tag *tag);
 static Namespace namespace_after_tag(Namespace current, const Tag *tag);
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -47,7 +49,7 @@ static bool scan_contiguous_attribute_content(TSLexer *lexer, const bool *valid_
 static bool scan_unquoted_attribute_fragment(TSLexer *lexer);
 static bool is_unquoted_attribute_content(int32_t character);
 static bool is_attribute_whitespace(int32_t character);
-static bool accepts_tag_suffix(TSLexer *lexer, bool closing);
+static bool accepts_tag_suffix(TSLexer *lexer, bool closing, String *suffix);
 
 static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
 
@@ -59,7 +61,7 @@ static inline Tag *top_tag(Scanner *scanner) {
 
 static void push_tags(Scanner *scanner, Tag tag, unsigned count) {
     Tag *top = top_tag(scanner);
-    if (top && tag_eq(top, &tag)) {
+    if (top && top->type == tag.type && tag_eq(top, &tag)) {
         array_back(&scanner->tags)->count += count;
         tag_free(&tag);
     } else {
@@ -224,14 +226,14 @@ static unsigned retained_tag_run_start(const Scanner *scanner) {
 }
 
 static bool namespace_boundary_tag(const Tag *tag) {
-    return tag->type == SVG || tag->type == MATH ||
+    return tag->type == SVG || tag->type == MATH || tag->type == ANNOTATION_XML ||
            child_namespace(NAMESPACE_SVG, tag) == NAMESPACE_HTML ||
            child_namespace(NAMESPACE_MATH, tag) == NAMESPACE_HTML;
 }
 
 static Tag read_tag(const char *buffer, unsigned *size) {
     Tag tag = tag_new();
-    tag.type = (TagType)buffer[(*size)++];
+    tag.type = (TagType)(uint8_t)buffer[(*size)++];
     if (tag.type == CUSTOM) {
         uint8_t name_length = (uint8_t)buffer[(*size)++];
         array_extend(&tag.custom_tag_name, name_length, &buffer[*size]);
@@ -406,10 +408,7 @@ static bool in_html_namespace(const Scanner *scanner) {
     Namespace current = scanner->omitted_namespace;
     for (unsigned i = 0; i < scanner->tags.size; i++) {
         const TagRun *run = &scanner->tags.contents[i];
-        if (current == NAMESPACE_HTML) {
-            if (run->tag.type == SVG) current = NAMESPACE_SVG;
-            if (run->tag.type == MATH) current = NAMESPACE_MATH;
-        }
+        current = tag_namespace(current, &run->tag);
         if (i + 1 == scanner->tags.size && run->count == 1) {
             return current == NAMESPACE_HTML;
         }
@@ -419,14 +418,27 @@ static bool in_html_namespace(const Scanner *scanner) {
 }
 
 static Namespace namespace_after_tag(Namespace current, const Tag *tag) {
-    if (current == NAMESPACE_HTML) {
-        if (tag->type == SVG) current = NAMESPACE_SVG;
-        if (tag->type == MATH) current = NAMESPACE_MATH;
+    return child_namespace(tag_namespace(current, tag), tag);
+}
+
+static Namespace tag_namespace(Namespace current, const Tag *tag) {
+    if (current == NAMESPACE_MATH_ANNOTATION) {
+        current = tag->type == SVG ? NAMESPACE_SVG : NAMESPACE_MATH;
     }
-    return child_namespace(current, tag);
+    if (current == NAMESPACE_HTML) {
+        if (tag->type == SVG) return NAMESPACE_SVG;
+        if (tag->type == MATH) return NAMESPACE_MATH;
+    }
+    return current;
 }
 
 static Namespace child_namespace(Namespace current, const Tag *tag) {
+    if (current == NAMESPACE_MATH && tag->type == ANNOTATION_XML) {
+        return NAMESPACE_MATH_ANNOTATION;
+    }
+    if (current == NAMESPACE_MATH && tag->type == ANNOTATION_XML_HTML) {
+        return NAMESPACE_HTML;
+    }
     if (current == NAMESPACE_SVG && tag->type == TITLE) {
         return NAMESPACE_HTML;
     }
@@ -474,7 +486,7 @@ static bool scan_element_text(Scanner *scanner, TSLexer *lexer, ElementTextMode 
     while (!lexer->eof(lexer) && !(mode == ELEMENT_TEXT_RCDATA && lexer->lookahead == '&')) {
         if (lexer->lookahead == '<' && mode != ELEMENT_TEXT_PLAINTEXT) {
             if (scan_element_end(lexer, tag)) {
-                if (!consumed && can_end && !accepts_tag_suffix(lexer, true)) {
+                if (!consumed && can_end && !accepts_tag_suffix(lexer, true, NULL)) {
                     pop_tag(scanner);
                     lexer->result_symbol = IMPLICIT_END_TAG;
                     return true;
@@ -627,7 +639,7 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     if (is_closing_tag) {
         if (parent && tag_eq(parent, &next_tag)) {
             bool close_raw = (parent->type == SCRIPT || parent->type == STYLE) &&
-                             !accepts_tag_suffix(lexer, true);
+                             !accepts_tag_suffix(lexer, true, NULL);
             tag_free(&next_tag);
             if (close_raw) {
                 pop_tag(scanner);
@@ -661,6 +673,8 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     return false;
 }
 
+static bool scan_start_tag_suffix(TSLexer *lexer, Tag *tag, bool *self_closing);
+
 static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
     String tag_name = scan_tag_name(lexer);
     if (tag_name.size == 0) {
@@ -669,13 +683,18 @@ static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
     }
 
     lexer->mark_end(lexer);
-    if (!accepts_tag_suffix(lexer, false)) {
-        array_delete(&tag_name);
+    Tag tag = tag_for_name(tag_name);
+    bool self_closing = false;
+    if (!scan_start_tag_suffix(lexer, &tag, &self_closing)) {
+        tag_free(&tag);
         return false;
     }
 
-    Tag tag = tag_for_name(tag_name);
     push_tags(scanner, tag, 1);
+    if (self_closing && !in_html_namespace(scanner)) {
+        lexer->result_symbol = START_TAG_NAME;
+        return true;
+    }
     switch (tag.type) {
         case SCRIPT:
             lexer->result_symbol = SCRIPT_START_TAG_NAME;
@@ -690,6 +709,19 @@ static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
     return true;
 }
 
+static bool scan_start_tag_suffix(TSLexer *lexer, Tag *tag, bool *self_closing) {
+    String suffix = array_new();
+    bool annotation = tag->type == ANNOTATION_XML;
+    bool raw = tag->type == SCRIPT || tag->type == STYLE;
+    bool accepted = accepts_tag_suffix(lexer, false, annotation || raw ? &suffix : NULL);
+    *self_closing = raw && tag_attributes_self_closing(&suffix);
+    if (accepted && annotation && tag_attributes_html_encoding(&suffix)) {
+        tag->type = ANNOTATION_XML_HTML;
+    }
+    array_delete(&suffix);
+    return accepted;
+}
+
 static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer, bool valid_end_tag) {
     String tag_name = scan_tag_name(lexer);
 
@@ -700,7 +732,7 @@ static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer, bool valid_end_t
 
     lexer->mark_end(lexer);
     if (valid_end_tag) {
-        if (!accepts_tag_suffix(lexer, true)) {
+        if (!accepts_tag_suffix(lexer, true, NULL)) {
             array_delete(&tag_name);
             return false;
         }
@@ -730,8 +762,11 @@ static bool scan_self_closing_tag_delimiter(Scanner *scanner, TSLexer *lexer) {
     advance(lexer);
     if (lexer->lookahead == '>') {
         advance(lexer);
-        if (scanner->tags.size > 0) {
-            pop_tag(scanner);
+        Tag *tag = top_tag(scanner);
+        if (tag) {
+            if ((tag->type != SCRIPT && tag->type != STYLE) || !in_html_namespace(scanner)) {
+                pop_tag(scanner);
+            }
             lexer->result_symbol = SELF_CLOSING_TAG_DELIMITER;
         }
         return true;
@@ -882,12 +917,14 @@ static bool is_unquoted_attribute_content(int32_t character) {
            character != '=' && character != '&';
 }
 
+static void advance_tag_suffix(TSLexer *lexer, String *suffix);
+
 // This lookahead consumes input: callers must mark the token end first.
 // The implicit-end path inherits that boundary from scan_markup_open.
-static bool accepts_tag_suffix(TSLexer *lexer, bool closing) {
+static bool accepts_tag_suffix(TSLexer *lexer, bool closing, String *suffix) {
     bool has_attribute_separator = iswspace(lexer->lookahead);
     while (iswspace(lexer->lookahead)) {
-        advance(lexer);
+        advance_tag_suffix(lexer, suffix);
     }
     if (closing && (lexer->lookahead == '&' || lexer->eof(lexer))) {
         return true;
@@ -923,10 +960,15 @@ static bool accepts_tag_suffix(TSLexer *lexer, bool closing) {
             value_start = false;
         }
         previous = lexer->lookahead;
-        advance(lexer);
+        advance_tag_suffix(lexer, suffix);
     }
     // An unfinished start at EOF cannot discard a later ancestor end.
     return !closing;
+}
+
+static void advance_tag_suffix(TSLexer *lexer, String *suffix) {
+    if (suffix) append_utf8(suffix, lexer->lookahead);
+    advance(lexer);
 }
 
 static bool is_attribute_whitespace(int32_t character) {
