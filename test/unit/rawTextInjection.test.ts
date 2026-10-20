@@ -194,6 +194,11 @@ test('self-closes foreign raw-element names and retains HTML raw text at integra
     for (const [prefix, suffix] of [
       ['<svg><foreignObject>', '</foreignObject></svg>'],
       ['<math><mtext>', '</mtext></math>'],
+      ['<math><annotation-xml><svg><foreignObject>', '</foreignObject></svg></annotation-xml></math>'],
+      [
+        '<math><annotation-xml encoding="application/xml"><svg><foreignObject>',
+        '</foreignObject></svg></annotation-xml></math>',
+      ],
     ]) {
       const tree = parser.parse(`${prefix}<script/>let a = 1;</script>${suffix}<p>after</p>`)!;
       try {
@@ -253,7 +258,7 @@ test('retains raw content at encoding-dependent MathML integration points', () =
       }
     }
     const source =
-      '<math><annotation-xml encoding="text/html"><script>body</script></annotation-xml></math><p>after</p>';
+      '<math><annotation-xml encoding="text/html"><script/>body</script></annotation-xml></math><p>after</p>';
     const start = source.indexOf('text/html');
     const before = parser.parse(source)!;
     const replacement = 'application/xml';
@@ -279,6 +284,42 @@ test('retains raw content at encoding-dependent MathML integration points', () =
       before.delete();
       incremental.delete();
       fresh.delete();
+    }
+  } finally {
+    query.delete();
+    parser.delete();
+  }
+});
+
+test('retains complete foreign raw-element content and distinguishes slashes in attribute values', () => {
+  const parser = new Parser().setLanguage(language);
+  const query = new Query(language, querySource);
+  try {
+    for (const tag of ['script', 'style']) {
+      const content = '<![CDATA[if(a<b)c()]]>';
+      for (const attributes of ['', ' data-value=path/', ' data-value="path/"']) {
+        const source = `<svg><${tag}${attributes}>${content}</${tag}></svg><p>after</p>`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+          expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+          expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([content]);
+          if (attributes) {
+            expect(tree.rootNode.descendantsOfType('attribute_value').map((node) => node.text)).toEqual(['path/']);
+          }
+        } finally {
+          tree.delete();
+        }
+      }
+    }
+    const tree = parser.parse('<svg><script data-value=path /><style data-value="path/"/></svg><p>after</p>')!;
+    try {
+      expect(tree.rootNode.hasError).toBe(false);
+      expect(tree.rootNode.descendantsOfType('self_closing_tag')).toHaveLength(2);
+      expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+      expect(query.captures(tree.rootNode)).toHaveLength(0);
+    } finally {
+      tree.delete();
     }
   } finally {
     query.delete();

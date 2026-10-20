@@ -31,8 +31,8 @@ input as `text`, including closing tags. The grammar's scanner requires an HTML 
 `</script` and `</style`, so longer names and overlapping prefixes remain raw text. Closing-name comparisons
 fold only ASCII letters, and embedded NUL characters remain part of raw-text content. In the HTML namespace, a trailing
 slash on a `script` or `style` opening tag remains part of its `start_tag`; it does not close the element, so subsequent
-content remains raw text until the matching end tag. Foreign-namespace `script` and `style` elements use ordinary element
-nodes and can self-close. MathML `annotation-xml` with an `encoding` value of `text/html` or `application/xhtml+xml`
+content remains raw text until the matching end tag. Self-closing foreign-namespace `script` and `style` use ordinary element nodes. Complete foreign
+elements retain raw-text nodes and injection ranges, including CDATA delimiters. MathML `annotation-xml` with an `encoding` value of `text/html` or `application/xhtml+xml`
 uses HTML parsing for its children. Encoding comparisons ignore ASCII case and decode character references. Script content follows
 HTML escaped and double-escaped states, so closing-tag text inside a double escape remains raw text. A script that reaches
 EOF while scanning raw content closes implicitly without an error: its `script_element` has no `end_tag` child, and its

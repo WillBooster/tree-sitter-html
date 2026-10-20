@@ -1,7 +1,7 @@
 #include "tag.h"
 #include "tree_sitter/parser.h"
 #include "attributeEntity.h"
-#include "annotationXml.h"
+#include "tagAttributes.h"
 
 #include <wctype.h>
 
@@ -24,7 +24,7 @@ enum TokenType {
     UNQUOTED_ATTRIBUTE_FRAGMENT,
 };
 
-typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH } Namespace;
+typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH, NAMESPACE_MATH_ANNOTATION } Namespace;
 
 typedef struct {
     Tag tag;
@@ -38,6 +38,7 @@ typedef struct {
 } Scanner;
 
 static Namespace child_namespace(Namespace current, const Tag *tag);
+static Namespace tag_namespace(Namespace current, const Tag *tag);
 static Namespace namespace_after_tag(Namespace current, const Tag *tag);
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -225,7 +226,7 @@ static unsigned retained_tag_run_start(const Scanner *scanner) {
 }
 
 static bool namespace_boundary_tag(const Tag *tag) {
-    return tag->type == SVG || tag->type == MATH ||
+    return tag->type == SVG || tag->type == MATH || tag->type == ANNOTATION_XML ||
            child_namespace(NAMESPACE_SVG, tag) == NAMESPACE_HTML ||
            child_namespace(NAMESPACE_MATH, tag) == NAMESPACE_HTML;
 }
@@ -407,10 +408,7 @@ static bool in_html_namespace(const Scanner *scanner) {
     Namespace current = scanner->omitted_namespace;
     for (unsigned i = 0; i < scanner->tags.size; i++) {
         const TagRun *run = &scanner->tags.contents[i];
-        if (current == NAMESPACE_HTML) {
-            if (run->tag.type == SVG) current = NAMESPACE_SVG;
-            if (run->tag.type == MATH) current = NAMESPACE_MATH;
-        }
+        current = tag_namespace(current, &run->tag);
         if (i + 1 == scanner->tags.size && run->count == 1) {
             return current == NAMESPACE_HTML;
         }
@@ -420,14 +418,24 @@ static bool in_html_namespace(const Scanner *scanner) {
 }
 
 static Namespace namespace_after_tag(Namespace current, const Tag *tag) {
-    if (current == NAMESPACE_HTML) {
-        if (tag->type == SVG) current = NAMESPACE_SVG;
-        if (tag->type == MATH) current = NAMESPACE_MATH;
+    return child_namespace(tag_namespace(current, tag), tag);
+}
+
+static Namespace tag_namespace(Namespace current, const Tag *tag) {
+    if (current == NAMESPACE_MATH_ANNOTATION) {
+        current = tag->type == SVG ? NAMESPACE_SVG : NAMESPACE_MATH;
     }
-    return child_namespace(current, tag);
+    if (current == NAMESPACE_HTML) {
+        if (tag->type == SVG) return NAMESPACE_SVG;
+        if (tag->type == MATH) return NAMESPACE_MATH;
+    }
+    return current;
 }
 
 static Namespace child_namespace(Namespace current, const Tag *tag) {
+    if (current == NAMESPACE_MATH && tag->type == ANNOTATION_XML) {
+        return NAMESPACE_MATH_ANNOTATION;
+    }
     if (current == NAMESPACE_MATH && tag->type == ANNOTATION_XML_HTML) {
         return NAMESPACE_HTML;
     }
@@ -665,7 +673,7 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     return false;
 }
 
-static bool scan_start_tag_suffix(TSLexer *lexer, Tag *tag);
+static bool scan_start_tag_suffix(TSLexer *lexer, Tag *tag, bool *self_closing);
 
 static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
     String tag_name = scan_tag_name(lexer);
@@ -676,13 +684,14 @@ static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
 
     lexer->mark_end(lexer);
     Tag tag = tag_for_name(tag_name);
-    if (!scan_start_tag_suffix(lexer, &tag)) {
+    bool self_closing = false;
+    if (!scan_start_tag_suffix(lexer, &tag, &self_closing)) {
         tag_free(&tag);
         return false;
     }
 
     push_tags(scanner, tag, 1);
-    if (!in_html_namespace(scanner)) {
+    if (self_closing && !in_html_namespace(scanner)) {
         lexer->result_symbol = START_TAG_NAME;
         return true;
     }
@@ -700,11 +709,13 @@ static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
     return true;
 }
 
-static bool scan_start_tag_suffix(TSLexer *lexer, Tag *tag) {
+static bool scan_start_tag_suffix(TSLexer *lexer, Tag *tag, bool *self_closing) {
     String suffix = array_new();
     bool annotation = tag->type == ANNOTATION_XML;
-    bool accepted = accepts_tag_suffix(lexer, false, annotation ? &suffix : NULL);
-    if (accepted && annotation && annotation_xml_html_encoding(&suffix)) {
+    bool raw = tag->type == SCRIPT || tag->type == STYLE;
+    bool accepted = accepts_tag_suffix(lexer, false, annotation || raw ? &suffix : NULL);
+    *self_closing = raw && tag_attributes_self_closing(&suffix);
+    if (accepted && annotation && tag_attributes_html_encoding(&suffix)) {
         tag->type = ANNOTATION_XML_HTML;
     }
     array_delete(&suffix);
