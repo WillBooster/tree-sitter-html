@@ -923,7 +923,7 @@ static bool accepts_tag_suffix(TSLexer *lexer, bool closing) {
         previous = lexer->lookahead;
         advance(lexer);
     }
-    return false;
+    return !closing;
 }
 
 static bool is_attribute_whitespace(int32_t character) {
