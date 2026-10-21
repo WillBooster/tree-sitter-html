@@ -14,7 +14,7 @@ to its authors and contributors. This is not an official release of that project
 
 This fork is based on upstream's version 0.23.2 grammar and external scanner and generates the parser with the
 [WillBooster/tree-sitter](https://github.com/WillBooster/tree-sitter) generator. The parser carries that fork's own ABI
-number `0x57420006`, so it loads with the WillBooster runtime, version 7.0.5 or later in the 7.x series
+number `0x57420007`, so it loads with the WillBooster runtime, version 10.0.2 or later in the 10.x series
 ([willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter),
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter)); upstream's runtime rejects
 it. Input that contains NUL characters can parse to a different tree than with upstream's 0.23.2 parser, because the
@@ -55,7 +55,7 @@ between attributes. Comment-shaped text inside a quoted value remains part of th
 ## Usage
 
 The npm package ships `tree-sitter-html.wasm` for
-[@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter) version 7.0.5 or later in the 7.x series, which runs in Node.js, Bun, browsers, and Cloudflare Workers.
+[@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter) version 10.0.2 or later in the 10.x series, which runs in Node.js, Bun, browsers, and Cloudflare Workers.
 In Node.js and Bun, load the grammar from its path:
 
 ```js
@@ -102,8 +102,8 @@ fuzzed with:
 
 ```toml
 [dependencies]
-tree-sitter = { package = "willbooster-tree-sitter", version = "7.0.5" }
-tree-sitter-html = { package = "willbooster-tree-sitter-html", version = "6" }
+tree-sitter = { package = "willbooster-tree-sitter", version = "10.0.2" }
+tree-sitter-html = { package = "willbooster-tree-sitter-html", version = "7" }
 ```
 
 ```rust
