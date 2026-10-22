@@ -29,7 +29,11 @@ and instructions stay `text`, while character references remain `entity` nodes. 
 `noembed`, and `noframes` also stays `text` up to the element's own closing tag. `plaintext` retains all remaining
 input as `text`, including closing tags. The grammar's scanner requires an HTML tag-name boundary after
 `</script` and `</style`, so longer names and overlapping prefixes remain raw text. Closing-name comparisons
-fold only ASCII letters, and embedded NUL characters remain part of raw-text content. In the HTML namespace, a trailing
+fold only ASCII letters, and embedded NUL characters remain part of raw-text content. Tag names start with an ASCII
+letter and retain subsequent characters, including Unicode, until HTML whitespace, `/`, `>`, NUL or end of input.
+Name recognition is independent of platform locale and custom-element registration. NUL retains the existing
+name boundary instead of the HTML tokenizer's replacement-character behavior.
+In the HTML namespace, a trailing
 slash on a `script` or `style` opening tag remains part of its `start_tag`; it does not close the element, so subsequent
 content remains raw text until the matching end tag. Self-closing foreign-namespace `script` and `style` use ordinary element nodes. Complete foreign
 elements retain raw-text nodes and injection ranges, including CDATA delimiters. MathML `annotation-xml` with an `encoding` value of `text/html` or `application/xhtml+xml`

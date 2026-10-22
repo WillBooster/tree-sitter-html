@@ -22,6 +22,8 @@ enum TokenType {
     UNQUOTED_ATTRIBUTE_ENTITY,
     ATTRIBUTE_AMPERSAND,
     UNQUOTED_ATTRIBUTE_FRAGMENT,
+    DISCARDED_START_TAG,
+    MISSING_START_TAG_END,
 };
 
 typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH, NAMESPACE_MATH_ANNOTATION } Namespace;
@@ -300,10 +302,14 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
 
 static inline int32_t ascii_upper(int32_t character);
 static void append_utf8(String *text, uint32_t character);
+static bool is_html_whitespace(int32_t character);
 
 static String scan_tag_name(TSLexer *lexer) {
     String tag_name = array_new();
-    while (iswalnum(lexer->lookahead) || lexer->lookahead == '-' || lexer->lookahead == ':') {
+    int32_t first = ascii_upper(lexer->lookahead);
+    if (first < 'A' || first > 'Z') return tag_name;
+    while (!lexer->eof(lexer) && lexer->lookahead != 0 && !is_html_whitespace(lexer->lookahead) &&
+           lexer->lookahead != '/' && lexer->lookahead != '>') {
         append_utf8(&tag_name, ascii_upper(lexer->lookahead));
         advance(lexer);
     }
@@ -361,7 +367,6 @@ static inline int32_t ascii_upper(int32_t character) {
     return character >= 'a' && character <= 'z' ? character - 'a' + 'A' : character;
 }
 
-static bool is_html_whitespace(int32_t character);
 static bool is_raw_name_boundary(TSLexer *lexer);
 static bool scan_processing_instruction_target(TSLexer *lexer);
 typedef enum { ELEMENT_TEXT_NONE, ELEMENT_TEXT_RAW, ELEMENT_TEXT_RCDATA, ELEMENT_TEXT_PLAINTEXT } ElementTextMode;
@@ -700,7 +705,9 @@ static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
     bool self_closing = false;
     if (!scan_start_tag_suffix(lexer, &tag, &self_closing)) {
         tag_free(&tag);
-        return false;
+        lexer->mark_end(lexer);
+        lexer->result_symbol = DISCARDED_START_TAG;
+        return true;
     }
 
     push_tags(scanner, tag, 1);
