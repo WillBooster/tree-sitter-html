@@ -11,6 +11,50 @@ const language = await Language.load(path.join(root, 'tree-sitter-html.wasm'));
 const highlights = fs.readFileSync(path.join(root, 'queries/highlights.scm'), 'utf8');
 const names = ['x-é', 'x-α', 'x-名', 'x-a\u0301', 'emotion-😍', 'x-a_b', 'x-a.b', 'x-·', 'x-\u200D', 'x-\u00A0'];
 
+test('retains ancestor ownership and following captures when repairing and undoing a rejected long name', () => {
+  const parser = new Parser().setLanguage(language);
+  const query = new Query(language, highlights);
+  const name = `x-${'<a'.repeat(150)}`;
+  const suffix = `>body</${name}>`;
+  let source = `<div>x<${name}${suffix}</div><p>after</p>`;
+  let tree = parser.parse(source)!;
+  const offset = source.indexOf('>body');
+  let previous = suffix;
+  try {
+    for (const replacement of [' ', suffix]) {
+      tree.edit(
+        new Edit({
+          startIndex: offset,
+          oldEndIndex: offset + previous.length,
+          newEndIndex: offset + replacement.length,
+          startPosition: { row: 0, column: offset },
+          oldEndPosition: { row: 0, column: offset + previous.length },
+          newEndPosition: { row: 0, column: offset + replacement.length },
+        })
+      );
+      source = source.slice(0, offset) + replacement + source.slice(offset + previous.length);
+      const updated = parser.parse(source, tree)!;
+      tree.delete();
+      tree = updated;
+      const fresh = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError).toBe(replacement === ' ');
+        expect(tree.rootNode.toString()).toBe(fresh.rootNode.toString());
+        expect(highlightRanges(query, tree)).toEqual(highlightRanges(query, fresh));
+        expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+        expect(tree.rootNode.firstNamedChild?.namedChildren.at(-1)?.text).toBe('</div>');
+      } finally {
+        fresh.delete();
+      }
+      previous = replacement;
+    }
+  } finally {
+    tree.delete();
+    query.delete();
+    parser.delete();
+  }
+});
+
 test('retains complete native tag names and the following paragraph', () => {
   const directory = fs.mkdtempSync(path.join(root, '.tmp/tag-names-'));
   try {

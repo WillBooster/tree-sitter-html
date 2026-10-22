@@ -22,6 +22,8 @@ enum TokenType {
     UNQUOTED_ATTRIBUTE_ENTITY,
     ATTRIBUTE_AMPERSAND,
     UNQUOTED_ATTRIBUTE_FRAGMENT,
+    DISCARDED_START_TAG,
+    MISSING_START_TAG_END,
 };
 
 typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH, NAMESPACE_MATH_ANNOTATION } Namespace;
@@ -703,7 +705,9 @@ static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
     bool self_closing = false;
     if (!scan_start_tag_suffix(lexer, &tag, &self_closing)) {
         tag_free(&tag);
-        return false;
+        lexer->mark_end(lexer);
+        lexer->result_symbol = DISCARDED_START_TAG;
+        return true;
     }
 
     push_tags(scanner, tag, 1);

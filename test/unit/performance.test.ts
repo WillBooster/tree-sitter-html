@@ -47,6 +47,27 @@ test('parses deeply nested repeated tags in linear time', { timeout: 60_000 }, (
   expectLinearParseTime(nestRepeatedTags(1000), nestRepeatedTags(10_000), false);
 });
 
+test.each([' ', '/', ' a=x '])('reads malformed long tag names in linear input work at %j', (suffix) => {
+  const reads = [250, 1000].map((count) => {
+    const source = `<div>x${'<a'.repeat(count)}${suffix}</div><p>after</p>`;
+    let characters = 0;
+    const tree = parser.parse((index) => {
+      const chunk = source.slice(index, index + 64);
+      characters += chunk.length;
+      return chunk;
+    })!;
+    try {
+      expect(tree.rootNode.hasError).toBe(true);
+      expect(tree.rootNode.firstNamedChild?.text).toBe(source.slice(0, source.indexOf('<p>')));
+      expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+    } finally {
+      tree.delete();
+    }
+    return characters;
+  });
+  expect(reads[1]! / reads[0]!).toBeLessThan(6);
+});
+
 function nestRepeatedTags(depth: number): string {
   return `${'<xyz>'.repeat(depth)}x${'</xyz>'.repeat(depth)}`;
 }
