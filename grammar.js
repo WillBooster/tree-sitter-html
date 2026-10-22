@@ -32,6 +32,8 @@ module.exports = grammar({
     $._unquoted_attribute_entity,
     $._attribute_ampersand,
     $._unquoted_attribute_fragment,
+    $._discarded_start_tag,
+    $._missing_start_tag_end,
   ],
 
   rules: {
@@ -52,6 +54,7 @@ module.exports = grammar({
       $.doctype,
       $.processing_instruction,
       seq($._unfinished_processing_instruction, '>'),
+      seq('<', $._discarded_start_tag, alias($._missing_start_tag_end, '>')),
       alias($._element_text, $.text),
       $.comment,
       $.entity,

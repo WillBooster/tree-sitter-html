@@ -71,6 +71,28 @@
           ]
         },
         {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "<"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_discarded_start_tag"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_missing_start_tag_end"
+              },
+              "named": false,
+              "value": ">"
+            }
+          ]
+        },
+        {
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
@@ -706,6 +728,14 @@
     {
       "type": "SYMBOL",
       "name": "_unquoted_attribute_fragment"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_discarded_start_tag"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_missing_start_tag_end"
     }
   ],
   "inline": [],
