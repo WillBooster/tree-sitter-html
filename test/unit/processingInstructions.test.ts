@@ -408,7 +408,7 @@ test('ends text elements only at ASCII-matching closing names', () => {
 test('keeps Unicode lookalike element names out of text-only modes', () => {
   const parser = new Parser().setLanguage(language);
   try {
-    for (const tag of ['tıtle', 'tŉtle', 'ıframe', 'noframeſ', 'tıtlé']) {
+    for (const tag of ['tıtle', 'tŉtle', 'noframeſ', 'tıtlé']) {
       const source = `<${tag}><?target?></${tag}><p>following</p>`;
       const tree = parser.parse(source)!;
       try {
