@@ -89,16 +89,25 @@ static void clear_tags(Scanner *scanner) {
 // Follows a serialized tag to repeat it the number of times in the next two bytes; no tag type uses this byte.
 #define TAG_RUN_MARKER UINT8_MAX
 #define TAG_RUN_SIZE (1 + sizeof(uint16_t))
+#define LONG_TAG_NAME_MARKER 0
 
 static inline unsigned serialized_tag_size(const Tag *tag) {
-    return tag->type == CUSTOM ? 2 + MIN(tag->custom_tag_name.size, UINT8_MAX) : 1;
+    if (tag->type != CUSTOM) return 1;
+    unsigned name_length = tag->custom_tag_name.size;
+    return 2 + name_length + (name_length > UINT8_MAX ? sizeof(uint16_t) : 0);
 }
 
 static unsigned write_tag(const Tag *tag, char *buffer, unsigned size) {
     buffer[size++] = (char)tag->type;
     if (tag->type == CUSTOM) {
-        unsigned name_length = MIN(tag->custom_tag_name.size, UINT8_MAX);
-        buffer[size++] = (char)name_length;
+        uint16_t name_length = tag->custom_tag_name.size;
+        if (name_length > UINT8_MAX) {
+            buffer[size++] = LONG_TAG_NAME_MARKER;
+            memcpy(&buffer[size], &name_length, sizeof(name_length));
+            size += sizeof(name_length);
+        } else {
+            buffer[size++] = (char)name_length;
+        }
         memcpy(&buffer[size], tag->custom_tag_name.contents, name_length);
         size += name_length;
     }
@@ -235,7 +244,11 @@ static Tag read_tag(const char *buffer, unsigned *size) {
     Tag tag = tag_new();
     tag.type = (TagType)(uint8_t)buffer[(*size)++];
     if (tag.type == CUSTOM) {
-        uint8_t name_length = (uint8_t)buffer[(*size)++];
+        uint16_t name_length = (uint8_t)buffer[(*size)++];
+        if (name_length == LONG_TAG_NAME_MARKER) {
+            memcpy(&name_length, &buffer[*size], sizeof(name_length));
+            *size += sizeof(name_length);
+        }
         array_extend(&tag.custom_tag_name, name_length, &buffer[*size]);
         *size += name_length;
     }
