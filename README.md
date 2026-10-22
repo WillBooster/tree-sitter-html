@@ -42,7 +42,8 @@ before following text, entities, complete comments, and processing instructions,
 Scanner serialization stores the open-tag stack from its innermost tag, compressing runs of identical tags, so active
 void, script, and style elements retain their identities when deeply nested. When distinct tags exceed the fixed-size
 buffer, serialization prioritizes inner tags and outer namespace boundaries, replacing ordinary outer tags with unknown
-runs. Lost tag identities can still produce recovery errors when those tags close. Custom tag names longer than 255 bytes are truncated in serialized state.
+runs. Custom tag names are retained in full when they fit the remaining buffer. Names that exceed the buffer are
+omitted along with older tags. Lost tag identities can still produce recovery errors when those tags close.
 Malformed input after a void element can replace its enclosing element with an `ERROR` node during recovery.
 
 Attribute values retain their complete `attribute_value` range and expose recognized named and numeric character

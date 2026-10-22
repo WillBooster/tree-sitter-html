@@ -92,6 +92,63 @@ for (const { name, open, close, compressible } of wrappers) {
   }, 30_000);
 }
 
+for (const { name, complete, depth = 1 } of [
+  { name: `x-${'a'.repeat(253)}`, complete: true },
+  { name: `x-${'a'.repeat(254)}`, complete: true },
+  { name: `x-${'a'.repeat(898)}`, complete: true },
+  { name: `x-${'a'.repeat(1013)}`, complete: true },
+  { name: `x-${'é'.repeat(128)}`, complete: true },
+  { name: `x-${'a'.repeat(898)}`, complete: true, depth: 3 },
+  { name: `x-${'a'.repeat(1014)}`, complete: false },
+  { name: `x-${'a'.repeat(1098)}`, complete: false },
+]) {
+  test(`retains following markup with ${depth} ${Buffer.byteLength(name)}-byte custom names after edits and undo`, () => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      const prefix = `<${name}>`.repeat(depth);
+      const suffix = `</${name}>`.repeat(depth);
+      const source = `${prefix}before${suffix}<p>after</p>`;
+      let tree = parser.parse(source)!;
+      try {
+        const offset = prefix.length;
+        for (const [previous, next] of [
+          ['before', 'before'],
+          ['before', 'edited'],
+          ['edited', 'before'],
+        ] as const) {
+          editLine(tree, offset, previous.length, next);
+          const updated = parser.parse(source.replace('before', next), tree)!;
+          tree.delete();
+          tree = updated;
+          const fresh = parser.parse(source.replace('before', next))!;
+          try {
+            expect(updated.rootNode.toString()).toBe(fresh.rootNode.toString());
+            const following = updated.rootNode
+              .descendantsOfType('element')
+              .find((node) => node.text === '<p>after</p>');
+            expect(following?.startIndex).toBe(source.indexOf('<p>'));
+            expect(following?.endIndex).toBe(source.length);
+            if (complete) {
+              expect(updated.rootNode.hasError).toBe(false);
+              expect(updated.rootNode.firstNamedChild?.lastNamedChild?.text).toBe(`</${name}>`);
+              expect(updated.rootNode.namedChildren.map((node) => node.text)).toEqual([
+                `${prefix}${next}${suffix}`,
+                '<p>after</p>',
+              ]);
+            }
+          } finally {
+            fresh.delete();
+          }
+        }
+      } finally {
+        tree.delete();
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+}
+
 function checkActiveTags(tree: Tree, text: string, compressible: boolean): void {
   expect(tree.rootNode.hasError).toBe(!compressible);
   const names = tree.rootNode.descendantsOfType('tag_name');
