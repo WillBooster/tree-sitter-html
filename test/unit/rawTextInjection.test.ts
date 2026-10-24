@@ -1,8 +1,8 @@
-import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
 import { Edit, Language, Parser, Query } from '@willbooster/web-tree-sitter';
+import { expect, test } from 'vitest';
 
 const root = path.join(import.meta.dirname, '../..');
 await Parser.init();
