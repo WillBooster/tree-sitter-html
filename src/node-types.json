@@ -101,6 +101,10 @@
         {
           "type": "text",
           "named": true
+        },
+        {
+          "type": "void_element",
+          "named": true
         }
       ]
     }
@@ -159,6 +163,10 @@
         },
         {
           "type": "text",
+          "named": true
+        },
+        {
+          "type": "void_element",
           "named": true
         }
       ]
@@ -288,6 +296,25 @@
         },
         {
           "type": "start_tag",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "void_element",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "attribute",
+          "named": true
+        },
+        {
+          "type": "tag_name",
           "named": true
         }
       ]

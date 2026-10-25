@@ -19,20 +19,19 @@ Tags with attributes
 ---
 
 (document
-  (element
-    (start_tag
-      (tag_name)
-      (attribute
-        (attribute_name)
-        (attribute_value))
-      (attribute
-        (attribute_name)
-        (quoted_attribute_value
-          (attribute_value)))
-      (attribute
-        (attribute_name)))
-    (end_tag
-      (tag_name))))
+  (void_element
+    (tag_name)
+    (attribute
+      (attribute_name)
+      (attribute_value))
+    (attribute
+      (attribute_name)
+      (quoted_attribute_value
+        (attribute_value)))
+    (attribute
+      (attribute_name)))
+  (erroneous_end_tag
+    (erroneous_end_tag_name)))
 
 ===================================
 Nested tags
@@ -78,25 +77,22 @@ Void tags
   (element
     (start_tag
       (tag_name))
-    (element
-      (start_tag
-        (tag_name)
-        (attribute
-          (attribute_name)
-          (quoted_attribute_value
-            (attribute_value)))))
-    (element
-      (start_tag
-        (tag_name)))
-    (element
-      (self_closing_tag
-        (tag_name)
-        (attribute
-          (attribute_name)
-          (attribute_value))
-        (attribute
-          (attribute_name)
+    (void_element
+      (tag_name)
+      (attribute
+        (attribute_name)
+        (quoted_attribute_value
           (attribute_value))))
+    (void_element
+      (tag_name))
+    (void_element
+      (tag_name)
+      (attribute
+        (attribute_name)
+        (attribute_value))
+      (attribute
+        (attribute_name)
+        (attribute_value)))
     (end_tag
       (tag_name))))
 
@@ -107,13 +103,12 @@ Void tags at EOF
 ---
 
 (document
-  (element
-    (start_tag
-      (tag_name)
-      (attribute
-        (attribute_name)
-        (quoted_attribute_value
-          (attribute_value))))))
+  (void_element
+    (tag_name)
+    (attribute
+      (attribute_name)
+      (quoted_attribute_value
+        (attribute_value)))))
 
 ==================================
 Custom tags
@@ -218,7 +213,8 @@ All-caps doctype
 ---
 
 (document
-  (doctype (doctype_value)))
+  (doctype
+    (doctype_value)))
 
 ==================================
 Lowercase doctype
@@ -227,7 +223,8 @@ Lowercase doctype
 ---
 
 (document
-  (doctype (doctype_value)))
+  (doctype
+    (doctype_value)))
 
 ==================================
 LI elements without close tags
@@ -381,21 +378,19 @@ COLGROUP elements without end tags
       (start_tag
         (tag_name))
       (text)
-      (element
-        (start_tag
-          (tag_name)
-          (attribute
-            (attribute_name)
-            (quoted_attribute_value
-              (attribute_value)))))
+      (void_element
+        (tag_name)
+        (attribute
+          (attribute_name)
+          (quoted_attribute_value
+            (attribute_value))))
       (text)
-      (element
-        (start_tag
-          (tag_name)
-          (attribute
-            (attribute_name)
-            (quoted_attribute_value
-              (attribute_value)))))
+      (void_element
+        (tag_name)
+        (attribute
+          (attribute_name)
+          (quoted_attribute_value
+            (attribute_value))))
       (text))
     (element
       (start_tag
@@ -545,7 +540,8 @@ Omitted end tags for html and head
 
 (document
   (text)
-  (doctype (doctype_value))
+  (doctype
+    (doctype_value))
   (element
     (start_tag
       (tag_name))
@@ -696,21 +692,17 @@ Void elements leave following content as siblings
   (element
     (start_tag
       (tag_name))
-    (element
-      (start_tag
-        (tag_name)))
+    (void_element
+      (tag_name))
     (comment)
-    (element
-      (start_tag
-        (tag_name)))
+    (void_element
+      (tag_name))
     (text)
-    (element
-      (start_tag
-        (tag_name)))
+    (void_element
+      (tag_name))
     (entity)
-    (element
-      (start_tag
-        (tag_name)))
+    (void_element
+      (tag_name))
     (text)
     (end_tag
       (tag_name)))
@@ -727,20 +719,17 @@ Void elements and explicit endings
   (element
     (start_tag
       (tag_name))
-    (element
-      (start_tag
-        (tag_name))
-      (end_tag
-        (tag_name)))
+    (void_element
+      (tag_name))
+    (erroneous_end_tag
+      (erroneous_end_tag_name))
     (comment)
-    (element
-      (self_closing_tag
-        (tag_name)))
+    (void_element
+      (tag_name))
     (end_tag
       (tag_name)))
-  (element
-    (start_tag
-      (tag_name)))
+  (void_element
+    (tag_name))
   (text))
 
 ==================================
@@ -751,26 +740,23 @@ Closing tags after void-element content preserve following text
 ---
 
 (document
-  (element
-    (start_tag
-      (tag_name)))
+  (void_element
+    (tag_name))
   (text)
   (erroneous_end_tag
     (erroneous_end_tag_name))
   (text)
-  (element
-    (start_tag
-      (tag_name)))
+  (void_element
+    (tag_name))
   (text)
   (erroneous_end_tag
     (erroneous_end_tag_name))
   (text)
-  (element
-    (start_tag
-      (tag_name)
-      (attribute
-        (attribute_name)
-        (attribute_value))))
+  (void_element
+    (tag_name)
+    (attribute
+      (attribute_name)
+      (attribute_value)))
   (text)
   (erroneous_end_tag
     (erroneous_end_tag_name))
@@ -820,23 +806,20 @@ Stray closing tags allow whitespace before the terminator
   (text))
 
 ==================================
-Incomplete comments after void elements keep enclosing recovery local
+Unfinished comments follow void elements
 ==================================
 <div><br><!--unclosed
 
 ---
 
 (document
-  (element
+  (ERROR
     (start_tag
       (tag_name))
-    (element
-      (start_tag
-        (tag_name))
-      (ERROR
-        (UNEXPECTED '-')))
-    (text)
-    (MISSING _implicit_end_tag)))
+    (void_element
+      (tag_name))
+    (UNEXPECTED '-'))
+  (text))
 
 ==================================
 Complete comments after void elements preserve following slash text
@@ -849,9 +832,8 @@ Complete comments after void elements preserve following slash text
   (element
     (start_tag
       (tag_name))
-    (element
-      (start_tag
-        (tag_name)))
+    (void_element
+      (tag_name))
     (comment)
     (text)
     (end_tag
@@ -897,3 +879,156 @@ Double-escaped script returns to script data after comment terminator
     (text)
     (end_tag
       (tag_name))))
+
+==================================
+Void elements respect foreign namespaces and HTML integration points
+==================================
+<svg><input>foreign</input><foreignObject><input>html</foreignObject></svg><p>after</p>
+
+---
+
+(document
+  (element
+    (start_tag
+      (tag_name))
+    (element
+      (start_tag
+        (tag_name))
+      (text)
+      (end_tag
+        (tag_name)))
+    (element
+      (start_tag
+        (tag_name))
+      (void_element
+        (tag_name))
+      (text)
+      (end_tag
+        (tag_name)))
+    (end_tag
+      (tag_name)))
+  (element
+    (start_tag
+      (tag_name))
+    (text)
+    (end_tag
+      (tag_name)))
+  (text))
+
+==================================
+Void breakouts end foreign content before later HTML void starts
+==================================
+<section><svg><text>a<br>b<input>c</text></svg><math><embed>d<input>e</math><p>after</p></section>
+
+---
+
+(document
+  (element
+    (start_tag
+      (tag_name))
+    (element
+      (start_tag
+        (tag_name))
+      (element
+        (start_tag
+          (tag_name))
+        (text)))
+    (void_element
+      (tag_name))
+    (text)
+    (void_element
+      (tag_name))
+    (text)
+    (erroneous_end_tag
+      (erroneous_end_tag_name))
+    (erroneous_end_tag
+      (erroneous_end_tag_name))
+    (element
+      (start_tag
+        (tag_name)))
+    (void_element
+      (tag_name))
+    (text)
+    (void_element
+      (tag_name))
+    (text)
+    (erroneous_end_tag
+      (erroneous_end_tag_name))
+    (element
+      (start_tag
+        (tag_name))
+      (text)
+      (end_tag
+        (tag_name)))
+    (end_tag
+      (tag_name)))
+  (text))
+
+==================================
+Nonvoid and conditional font breakouts restore HTML void handling
+==================================
+<section><svg><p><input><span>x</span></p></svg><svg><font color=red><input>html</font></svg><math><font data-note="color=red"><input>foreign</input></font></math></section>
+
+---
+
+(document
+  (element
+    (start_tag
+      (tag_name))
+    (element
+      (start_tag
+        (tag_name)))
+    (element
+      (start_tag
+        (tag_name))
+      (void_element
+        (tag_name))
+      (element
+        (start_tag
+          (tag_name))
+        (text)
+        (end_tag
+          (tag_name)))
+      (end_tag
+        (tag_name)))
+    (erroneous_end_tag
+      (erroneous_end_tag_name))
+    (element
+      (start_tag
+        (tag_name)))
+    (element
+      (start_tag
+        (tag_name)
+        (attribute
+          (attribute_name)
+          (attribute_value)))
+      (void_element
+        (tag_name))
+      (text)
+      (end_tag
+        (tag_name)))
+    (erroneous_end_tag
+      (erroneous_end_tag_name))
+    (element
+      (start_tag
+        (tag_name))
+      (element
+        (start_tag
+          (tag_name)
+          (attribute
+            (attribute_name)
+            (quoted_attribute_value
+              (attribute_value))))
+        (element
+          (start_tag
+            (tag_name))
+          (text)
+          (end_tag
+            (tag_name)))
+        (end_tag
+          (tag_name)))
+      (end_tag
+        (tag_name)))
+    (end_tag
+      (tag_name)))
+  (text))

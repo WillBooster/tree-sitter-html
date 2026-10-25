@@ -41,10 +41,14 @@ uses HTML parsing for its children. Encoding comparisons ignore ASCII case and d
 HTML escaped and double-escaped states, so closing-tag text inside a double escape remains raw text. A script that reaches
 EOF while scanning raw content closes implicitly without an error: its `script_element` has no `end_tag` child, and its
 remaining content stays available for JavaScript injection. Incomplete closing tags such as `</script` still report
-recovery errors. Unterminated style elements still report an error. Void elements close
-before following text, entities, complete comments, and processing instructions, which become siblings instead of children.
+recovery errors. Unterminated style elements still report an error. HTML-namespace void elements such as `<input>` and
+`<br/>` use `void_element` nodes with direct `tag_name` and `attribute` children. Following text, entities, comments,
+and processing instructions are siblings, and explicit void-element end tags are `erroneous_end_tag` siblings.
+In SVG/MathML content outside HTML integration points, HTML breakout start tags such as `<p>` and `<span>` implicitly
+close the foreign ancestors. The same applies to `<font>` with a `color`, `face`, or `size` attribute and to `</br>` or
+`</p>`. Later end tags for those foreign ancestors become `erroneous_end_tag` nodes.
 Scanner serialization stores the open-tag stack from its innermost tag, compressing runs of identical tags, so active
-void, script, and style elements retain their identities when deeply nested. When distinct tags exceed the fixed-size
+script and style elements retain their identities when deeply nested. When distinct tags exceed the fixed-size
 buffer, serialization prioritizes inner tags and outer namespace boundaries, replacing ordinary outer tags with unknown
 runs. Custom tag names are retained in full when they fit the remaining buffer. Names that exceed the buffer are
 omitted along with older tags. Lost tag identities can still produce recovery errors when those tags close.

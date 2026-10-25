@@ -34,6 +34,7 @@ module.exports = grammar({
     $._unquoted_attribute_fragment,
     $._discarded_start_tag,
     $._missing_start_tag_end,
+    $._void_start_tag_name,
   ],
 
   rules: {
@@ -61,6 +62,7 @@ module.exports = grammar({
       $.text,
       alias('&', $.text),
       $.element,
+      $.void_element,
       $.script_element,
       $.style_element,
       $.erroneous_end_tag,
@@ -73,6 +75,13 @@ module.exports = grammar({
         choice($.end_tag, $._implicit_end_tag),
       ),
       $.self_closing_tag,
+    ),
+
+    void_element: $ => seq(
+      '<',
+      alias($._void_start_tag_name, $.tag_name),
+      repeat($.attribute),
+      choice(seq('>', $._implicit_end_tag), '/>'),
     ),
 
     script_element: $ => seq(
