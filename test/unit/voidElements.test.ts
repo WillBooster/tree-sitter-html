@@ -75,11 +75,12 @@ test('uses ordinary elements in foreign content and void elements after HTML int
       ['<math><mtext>', '</mtext></math>'],
       ['<math><annotation-xml encoding="text/html">', '</annotation-xml></math>'],
     ]) {
-      const tree = parser.parse(`${open}<input>text${close}`)!;
+      const tree = parser.parse(`${open}<input>text<br>tail${close}`)!;
       try {
         expect(tree.rootNode.hasError).toBe(false);
-        expect(tree.rootNode.descendantsOfType('void_element').map((node) => node.text)).toEqual(['<input>']);
-        expect(tree.rootNode.descendantsOfType('text').map((node) => node.text)).toEqual(['text']);
+        expect(tree.rootNode.descendantsOfType('void_element').map((node) => node.text)).toEqual(['<input>', '<br>']);
+        expect(tree.rootNode.descendantsOfType('text').map((node) => node.text)).toEqual(['text', 'tail']);
+        expect(tree.rootNode.descendantsOfType('erroneous_end_tag')).toHaveLength(0);
       } finally {
         tree.delete();
       }
@@ -133,6 +134,89 @@ test('updates void classification and sibling ranges after editing and undoing t
         } else {
           expect(tree.rootNode.descendantsOfType('void_element')).toHaveLength(0);
         }
+      } finally {
+        fresh.delete();
+      }
+    }
+  } finally {
+    tree.delete();
+    parser.delete();
+  }
+});
+
+test('leaves foreign content at a void breakout while retaining source ranges and later HTML mode', () => {
+  const parser = new Parser().setLanguage(language);
+  const query = new Query(language, '(void_element (tag_name) @void)');
+  try {
+    const source = '<section><svg><text>before<br>between<input>after</text></svg><p>outside</p></section>';
+    const tree = parser.parse(source)!;
+    try {
+      expect(tree.rootNode.hasError).toBe(false);
+      expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual(['br', 'input']);
+      const section = tree.rootNode.firstNamedChild!;
+      const nodes = section.namedChildren;
+      expect(nodes.find((node) => node.text === '<svg><text>before')?.type).toBe('element');
+      const lineBreak = nodes.find((node) => node.type === 'void_element' && node.text === '<br>')!;
+      expect([lineBreak.startIndex, lineBreak.endIndex]).toEqual([
+        source.indexOf('<br>'),
+        source.indexOf('<br>') + '<br>'.length,
+      ]);
+      expect(lineBreak.nextNamedSibling?.text).toBe('between');
+      const input = nodes.find((node) => node.type === 'void_element' && node.text === '<input>')!;
+      expect(input.nextNamedSibling?.text).toBe('after');
+      expect(nodes.filter((node) => node.type === 'erroneous_end_tag').map((node) => node.text)).toEqual([
+        '</text>',
+        '</svg>',
+      ]);
+      expect(nodes.find((node) => node.text === '<p>outside</p>')?.type).toBe('element');
+    } finally {
+      tree.delete();
+    }
+  } finally {
+    query.delete();
+    parser.delete();
+  }
+});
+
+test('recomputes foreign breakout boundaries after editing and undoing an opening name', () => {
+  const parser = new Parser().setLanguage(language);
+  let source = '<section><math><input>foreign</input></math><p>after</p></section>';
+  let tree = parser.parse(source)!;
+  try {
+    for (const [previous, next] of [
+      ['input', 'embed'],
+      ['embed', 'input'],
+    ] as const) {
+      const offset = source.indexOf(previous);
+      tree.edit(
+        new Edit({
+          startIndex: offset,
+          oldEndIndex: offset + previous.length,
+          newEndIndex: offset + next.length,
+          startPosition: { row: 0, column: offset },
+          oldEndPosition: { row: 0, column: offset + previous.length },
+          newEndPosition: { row: 0, column: offset + next.length },
+        })
+      );
+      source = source.slice(0, offset) + next + source.slice(offset + previous.length);
+      const updated = parser.parse(source, tree)!;
+      tree.delete();
+      tree = updated;
+      const fresh = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.toString()).toBe(fresh.rootNode.toString());
+        expect(tree.rootNode.descendantsOfType('void_element').map((node) => node.text)).toEqual(
+          next === 'embed' ? ['<embed>'] : []
+        );
+        const section = tree.rootNode.firstNamedChild!;
+        expect(section.namedChildren.some((node) => node.type === 'text' && node.text === 'foreign')).toBe(
+          next === 'embed'
+        );
+        const following = tree.rootNode.descendantsOfType('element').find((node) => node.text === '<p>after</p>');
+        expect([following?.startIndex, following?.endIndex]).toEqual([
+          source.indexOf('<p>'),
+          source.indexOf('</section>'),
+        ]);
       } finally {
         fresh.delete();
       }

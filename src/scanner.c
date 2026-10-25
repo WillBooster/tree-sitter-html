@@ -420,17 +420,23 @@ static ElementTextMode classify_element_text(const Tag *tag) {
     return ELEMENT_TEXT_NONE;
 }
 
+static Namespace active_namespace(const Scanner *scanner, bool children);
+
 static bool in_html_namespace(const Scanner *scanner) {
+    return active_namespace(scanner, false) == NAMESPACE_HTML;
+}
+
+static Namespace active_namespace(const Scanner *scanner, bool children) {
     Namespace current = scanner->omitted_namespace;
     for (unsigned i = 0; i < scanner->tags.size; i++) {
         const TagRun *run = &scanner->tags.contents[i];
         current = tag_namespace(current, &run->tag);
-        if (i + 1 == scanner->tags.size && run->count == 1) {
-            return current == NAMESPACE_HTML;
+        if (!children && i + 1 == scanner->tags.size && run->count == 1) {
+            return current;
         }
         current = child_namespace(current, &run->tag);
     }
-    return current == NAMESPACE_HTML;
+    return current;
 }
 
 static Namespace namespace_after_tag(Namespace current, const Tag *tag) {
@@ -645,6 +651,14 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     }
 
     Tag next_tag = tag_for_name(tag_name);
+    bool void_breakout = next_tag.type == BR || next_tag.type == EMBED || next_tag.type == HR ||
+                         next_tag.type == IMG || next_tag.type == META;
+    if (!is_closing_tag && void_breakout && parent && active_namespace(scanner, true) != NAMESPACE_HTML) {
+        pop_tag(scanner);
+        lexer->result_symbol = IMPLICIT_END_TAG;
+        tag_free(&next_tag);
+        return true;
+    }
 
     if (is_closing_tag) {
         if (parent && tag_eq(parent, &next_tag)) {

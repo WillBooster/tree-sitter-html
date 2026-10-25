@@ -491,12 +491,12 @@ static const TSStateId ts_primary_state_ids[STATE_COUNT] = {
   [20] = 20,
   [21] = 21,
   [22] = 22,
-  [23] = 23,
-  [24] = 15,
-  [25] = 25,
+  [23] = 15,
+  [24] = 19,
+  [25] = 17,
   [26] = 26,
-  [27] = 19,
-  [28] = 17,
+  [27] = 27,
+  [28] = 28,
   [29] = 29,
   [30] = 30,
   [31] = 31,
@@ -507,82 +507,82 @@ static const TSStateId ts_primary_state_ids[STATE_COUNT] = {
   [36] = 36,
   [37] = 37,
   [38] = 38,
-  [39] = 20,
-  [40] = 21,
-  [41] = 22,
-  [42] = 30,
-  [43] = 43,
-  [44] = 44,
-  [45] = 45,
-  [46] = 46,
+  [39] = 39,
+  [40] = 40,
+  [41] = 41,
+  [42] = 42,
+  [43] = 20,
+  [44] = 21,
+  [45] = 22,
+  [46] = 34,
   [47] = 47,
   [48] = 48,
   [49] = 49,
-  [50] = 50,
+  [50] = 40,
   [51] = 51,
   [52] = 52,
   [53] = 53,
   [54] = 54,
   [55] = 55,
-  [56] = 44,
+  [56] = 41,
   [57] = 57,
-  [58] = 58,
+  [58] = 48,
   [59] = 59,
   [60] = 60,
   [61] = 61,
-  [62] = 43,
+  [62] = 62,
   [63] = 63,
-  [64] = 64,
-  [65] = 36,
+  [64] = 47,
+  [65] = 65,
   [66] = 66,
-  [67] = 37,
+  [67] = 67,
   [68] = 68,
-  [69] = 69,
+  [69] = 66,
   [70] = 70,
   [71] = 71,
   [72] = 72,
-  [73] = 64,
-  [74] = 74,
+  [73] = 73,
+  [74] = 67,
   [75] = 75,
   [76] = 76,
-  [77] = 76,
-  [78] = 75,
-  [79] = 68,
-  [80] = 69,
-  [81] = 70,
-  [82] = 71,
-  [83] = 72,
-  [84] = 31,
+  [77] = 77,
+  [78] = 77,
+  [79] = 76,
+  [80] = 70,
+  [81] = 71,
+  [82] = 72,
+  [83] = 73,
+  [84] = 35,
   [85] = 49,
-  [86] = 55,
-  [87] = 74,
+  [86] = 57,
+  [87] = 75,
   [88] = 88,
   [89] = 89,
   [90] = 90,
   [91] = 91,
-  [92] = 66,
+  [92] = 68,
   [93] = 93,
   [94] = 94,
   [95] = 95,
   [96] = 96,
-  [97] = 34,
-  [98] = 53,
+  [97] = 38,
+  [98] = 54,
   [99] = 99,
   [100] = 100,
-  [101] = 35,
+  [101] = 39,
   [102] = 102,
   [103] = 103,
-  [104] = 54,
+  [104] = 55,
   [105] = 105,
-  [106] = 60,
+  [106] = 62,
   [107] = 107,
   [108] = 108,
   [109] = 108,
   [110] = 107,
-  [111] = 59,
-  [112] = 38,
-  [113] = 23,
-  [114] = 61,
+  [111] = 61,
+  [112] = 42,
+  [113] = 26,
+  [114] = 63,
 };
 
 #define TS_LEX_REPEAT(skip_value, label)             \
@@ -901,9 +901,9 @@ static const TSLexerMode ts_lex_modes[] = {
   [7] = {.lex_state = 0, .lex_state_after_extra = 0, .external_lex_state = 10, .external_lex_state_after_extra = 10, .reserved_word_set_id = 0},
   [8] = {.lex_state = 0, .lex_state_after_extra = 0, .external_lex_state = 14, .external_lex_state_after_extra = 14, .reserved_word_set_id = 0},
   [9] = {.lex_state = 4, .lex_state_after_extra = 4, .external_lex_state = 5, .external_lex_state_after_extra = 5, .reserved_word_set_id = 0},
-  [10] = {.lex_state = 0, .lex_state_after_extra = 0, .external_lex_state = 9, .external_lex_state_after_extra = 9, .reserved_word_set_id = 0},
-  [11] = {.lex_state = 0, .lex_state_after_extra = 0, .external_lex_state = 13, .external_lex_state_after_extra = 13, .reserved_word_set_id = 0},
-  [12] = {.lex_state = 3, .lex_state_after_extra = 6, .external_lex_state = 7, .external_lex_state_after_extra = 7, .reserved_word_set_id = 0},
+  [10] = {.lex_state = 3, .lex_state_after_extra = 6, .external_lex_state = 7, .external_lex_state_after_extra = 7, .reserved_word_set_id = 0},
+  [11] = {.lex_state = 0, .lex_state_after_extra = 0, .external_lex_state = 9, .external_lex_state_after_extra = 9, .reserved_word_set_id = 0},
+  [12] = {.lex_state = 0, .lex_state_after_extra = 0, .external_lex_state = 13, .external_lex_state_after_extra = 13, .reserved_word_set_id = 0},
   [13] = {.lex_state = 2, .lex_state_after_extra = 2, .external_lex_state = 4, .external_lex_state_after_extra = 4, .reserved_word_set_id = 0},
   [14] = {.lex_state = 5, .lex_state_after_extra = 5, .external_lex_state = 0, .external_lex_state_after_extra = 0, .reserved_word_set_id = 0},
   [15] = {.lex_state = 8, .lex_state_after_extra = 7, .external_lex_state = 7, .external_lex_state_after_extra = 7, .reserved_word_set_id = 0},
@@ -912,13 +912,13 @@ static const TSLexerMode ts_lex_modes[] = {
 
 static const uint16_t ts_lex_mode_ids[STATE_COUNT] = {
   0, 1, 2, 2, 2, 2, 3, 4, 2, 2, 1, 5, 1, 3, 4, 1, 
-  1, 5, 2, 6, 4, 7, 2, 8, 2, 4, 9, 6, 5, 4, 4, 1, 
-  4, 10, 10, 7, 1, 5, 11, 4, 7, 1, 4, 7, 1, 12, 12, 12, 
-  4, 1, 13, 4, 10, 10, 7, 1, 2, 4, 14, 5, 14, 5, 7, 2, 
-  2, 2, 4, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 
-  2, 2, 2, 2, 2, 2, 2, 2, 13, 13, 15, 12, 4, 4, 4, 15, 
-  15, 10, 10, 15, 4, 7, 10, 14, 7, 10, 14, 5, 16, 16, 5, 5, 
-  11, 8, 5, 
+  1, 5, 2, 6, 4, 7, 2, 2, 6, 5, 8, 4, 9, 10, 10, 10, 
+  4, 4, 4, 1, 4, 11, 11, 7, 1, 5, 12, 4, 7, 1, 4, 7, 
+  1, 1, 2, 13, 4, 11, 11, 7, 5, 1, 2, 4, 14, 5, 14, 5, 
+  7, 2, 2, 2, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 
+  2, 2, 2, 2, 2, 2, 2, 2, 13, 13, 15, 10, 4, 4, 4, 15, 
+  15, 11, 11, 15, 4, 7, 11, 14, 7, 11, 14, 5, 16, 16, 5, 5, 
+  12, 8, 5, 
 };
 
 static const uint16_t ts_parse_table[LARGE_STATE_COUNT][SYMBOL_COUNT] = {
@@ -963,9 +963,9 @@ static const uint16_t ts_parse_table[LARGE_STATE_COUNT][SYMBOL_COUNT] = {
     [sym_script_element] = STATE(10),
     [sym_style_element] = STATE(10),
     [sym_start_tag] = STATE(18),
-    [sym_script_start_tag] = STATE(34),
-    [sym_style_start_tag] = STATE(53),
-    [sym_self_closing_tag] = STATE(76),
+    [sym_script_start_tag] = STATE(38),
+    [sym_style_start_tag] = STATE(54),
+    [sym_self_closing_tag] = STATE(77),
     [sym_erroneous_end_tag] = STATE(10),
     [aux_sym_document_repeat1] = STATE(10),
     [ts_builtin_sym_end] = ACTIONS(2),
@@ -990,7 +990,7 @@ static const uint16_t ts_parse_table[LARGE_STATE_COUNT][SYMBOL_COUNT] = {
     [sym_start_tag] = STATE(5),
     [sym_script_start_tag] = STATE(97),
     [sym_style_start_tag] = STATE(98),
-    [sym_self_closing_tag] = STATE(77),
+    [sym_self_closing_tag] = STATE(78),
     [sym_end_tag] = STATE(3),
     [sym_erroneous_end_tag] = STATE(8),
     [aux_sym_document_repeat1] = STATE(8),
@@ -1042,8 +1042,8 @@ static const uint16_t ts_parse_table[LARGE_STATE_COUNT][SYMBOL_COUNT] = {
     [sym_start_tag] = STATE(5),
     [sym_script_start_tag] = STATE(97),
     [sym_style_start_tag] = STATE(98),
-    [sym_self_closing_tag] = STATE(77),
-    [sym_end_tag] = STATE(79),
+    [sym_self_closing_tag] = STATE(78),
+    [sym_end_tag] = STATE(66),
     [sym_erroneous_end_tag] = STATE(2),
     [aux_sym_document_repeat1] = STATE(2),
     [anon_sym_LT_BANG] = ACTIONS(9),
@@ -1066,8 +1066,8 @@ static const uint16_t ts_parse_table[LARGE_STATE_COUNT][SYMBOL_COUNT] = {
     [sym__void_start_tag_name] = ACTIONS(27),
   },
   [STATE(7)] = {
-    [sym_attribute] = STATE(66),
-    [aux_sym_void_element_repeat1] = STATE(66),
+    [sym_attribute] = STATE(68),
+    [aux_sym_void_element_repeat1] = STATE(68),
     [anon_sym_GT] = ACTIONS(28),
     [anon_sym_SLASH_GT] = ACTIONS(29),
     [sym_attribute_name] = ACTIONS(30),
@@ -1076,25 +1076,25 @@ static const uint16_t ts_parse_table[LARGE_STATE_COUNT][SYMBOL_COUNT] = {
 
 static const uint16_t ts_small_parse_table[] = {
   [0] =
-    11, 8, 59, 8, 8, 8, 8, 8, 5, 97, 98, 77, 3, 8, 57, 29, 
-    29, 8, 58, 57, 88, 90, 47, 
+    11, 8, 61, 8, 8, 8, 8, 8, 5, 97, 98, 78, 3, 8, 59, 33, 
+    33, 8, 60, 59, 88, 90, 31, 
   [23] =
     11, 1, 31, 5, 33, 6, 35, 8, 37, 12, 35, 17, 39, 23, 41, 25, 
     39, 26, 39, 27, 39, 28, 42, 
   [46] =
-    5, 5, 1, 44, 77, 1, 47, 97, 1, 45, 98, 1, 46, 65535, 8, 37, 
+    5, 5, 1, 44, 78, 1, 47, 97, 1, 45, 98, 1, 46, 65535, 8, 37, 
     39, 40, 41, 42, 43, 49, 53, 
   [69] =
     11, 1, 9, 5, 10, 6, 11, 8, 44, 12, 11, 17, 13, 23, 45, 25, 
     13, 26, 13, 27, 13, 28, 15, 
   [92] =
-    6, 5, 1, 44, 16, 1, 48, 77, 1, 47, 97, 1, 45, 98, 1, 46, 
+    6, 5, 1, 44, 16, 1, 48, 78, 1, 47, 97, 1, 45, 98, 1, 46, 
     8, 8, 37, 39, 40, 41, 42, 43, 49, 53, 
   [118] =
     11, 0, 46, 1, 3, 5, 4, 6, 47, 8, 6, 12, 47, 17, 48, 25, 
     48, 26, 48, 27, 48, 28, 8, 
   [141] =
-    5, 18, 1, 44, 34, 1, 45, 53, 1, 46, 76, 1, 47, 12, 8, 37, 
+    5, 18, 1, 44, 38, 1, 45, 54, 1, 46, 77, 1, 47, 12, 8, 37, 
     39, 40, 41, 42, 43, 49, 53, 
   [164] =
     1, 0, 49, 
@@ -1104,7 +1104,7 @@ static const uint16_t ts_small_parse_table[] = {
     11, 0, 41, 1, 50, 5, 52, 6, 54, 8, 56, 12, 54, 17, 58, 25, 
     58, 26, 58, 27, 58, 28, 60, 
   [191] =
-    5, 18, 1, 44, 34, 1, 45, 53, 1, 46, 76, 1, 47, 65535, 8, 37, 
+    5, 18, 1, 44, 38, 1, 45, 54, 1, 46, 77, 1, 47, 65535, 8, 37, 
     39, 40, 41, 42, 43, 49, 53, 
   [214] =
     5, 18, 62, 19, 24, 20, 25, 33, 63, 35, 64, 
@@ -1126,14 +1126,14 @@ static const uint16_t ts_small_parse_table[] = {
     11, 1, 9, 5, 10, 6, 69, 8, 44, 12, 69, 17, 70, 23, 71, 25, 
     70, 26, 70, 27, 70, 28, 15, 
   [284] =
-    6, 5, 1, 44, 68, 1, 48, 77, 1, 47, 97, 1, 45, 98, 1, 46, 
+    6, 5, 1, 44, 69, 1, 48, 78, 1, 47, 97, 1, 45, 98, 1, 46, 
     9, 8, 37, 39, 40, 41, 42, 43, 49, 53, 
   [310] =
     2, 21, 72, 22, 73, 
   [315] =
     3, 2, 74, 7, 75, 10, 30, 
   [322] =
-    2, 50, 30, 55, 30, 
+    2, 50, 34, 55, 34, 
   [327] =
     1, 23, 76, 
   [330] =
@@ -1141,153 +1141,153 @@ static const uint16_t ts_small_parse_table[] = {
   [333] =
     2, 77, 237, 0, 78, 330, 0, 
   [340] =
-    1, 21, 72, 
-  [343] =
     2, 67, 237, 0, 66, 330, 0, 
-  [350] =
-    4, 2, 79, 7, 79, 9, 80, 10, 79, 
-  [359] =
-    5, 11, 81, 13, 82, 15, 83, 30, 81, 31, 81, 
-  [370] =
-    2, 51, 29, 52, 29, 
-  [375] =
-    2, 21, 84, 22, 73, 
-  [380] =
-    1, 2, 85, 
+  [347] =
+    2, 21, 79, 22, 73, 
+  [352] =
+    1, 2, 80, 
+  [355] =
+    1, 21, 72, 
+  [358] =
+    4, 2, 81, 7, 81, 9, 82, 10, 81, 
+  [367] =
+    5, 11, 83, 13, 84, 15, 85, 30, 83, 31, 83, 
+  [378] =
+    2, 51, 33, 52, 33, 
   [383] =
-    1, 86, 3, 2, 7, 10, 
-  [389] =
-    3, 2, 87, 7, 76, 10, 30, 
-  [396] =
-    2, 50, 57, 55, 57, 
-  [401] =
-    2, 89, 237, 0, 88, 240, 0, 
-  [408] =
-    3, 2, 90, 7, 90, 10, 30, 
-  [415] =
-    2, 50, 93, 55, 93, 
-  [420] =
-    1, 91, 3, 8, 23, 24, 
-  [426] =
-    3, 8, 92, 23, 93, 24, 94, 
-  [433] =
-    1, 48, 69, 
-  [436] =
-    2, 8, 92, 23, 95, 
-  [441] =
-    1, 48, 31, 
-  [444] =
-    2, 97, 237, 0, 96, 240, 0, 
-  [451] =
-    1, 2, 98, 
-  [454] =
-    1, 22, 99, 
-  [457] =
-    3, 2, 100, 7, 101, 10, 30, 
-  [464] =
-    2, 50, 42, 55, 42, 
-  [469] =
-    1, 23, 102, 
-  [472] =
-    2, 77, 237, 0, 78, 240, 0, 
-  [479] =
-    3, 2, 103, 7, 102, 10, 30, 
-  [486] =
-    1, 23, 104, 
-  [489] =
-    2, 106, 237, 0, 105, 240, 0, 
-  [496] =
-    4, 15, 107, 16, 108, 29, 108, 31, 108, 
-  [505] =
-    1, 58, 47, 
-  [508] =
-    4, 15, 109, 16, 110, 29, 110, 31, 110, 
-  [517] =
-    4, 15, 111, 16, 108, 29, 108, 31, 108, 
-  [526] =
+    4, 15, 86, 16, 87, 29, 87, 31, 87, 
+  [392] =
+    1, 58, 31, 
+  [395] =
+    4, 15, 88, 16, 89, 29, 89, 31, 89, 
+  [404] =
+    4, 15, 90, 16, 87, 29, 87, 31, 87, 
+  [413] =
     1, 58, 91, 
-  [529] =
-    1, 112, 3, 2, 7, 10, 
+  [416] =
+    1, 91, 3, 2, 7, 10, 
+  [422] =
+    1, 92, 3, 2, 7, 10, 
+  [428] =
+    3, 2, 93, 7, 76, 10, 30, 
+  [435] =
+    2, 50, 59, 55, 59, 
+  [440] =
+    2, 95, 237, 0, 94, 240, 0, 
+  [447] =
+    3, 2, 96, 7, 96, 10, 30, 
+  [454] =
+    2, 50, 93, 55, 93, 
+  [459] =
+    1, 97, 3, 8, 23, 24, 
+  [465] =
+    3, 8, 98, 23, 99, 24, 100, 
+  [472] =
+    1, 48, 70, 
+  [475] =
+    2, 8, 98, 23, 101, 
+  [480] =
+    1, 48, 35, 
+  [483] =
+    2, 103, 237, 0, 102, 240, 0, 
+  [490] =
+    1, 2, 104, 
+  [493] =
+    1, 22, 105, 
+  [496] =
+    3, 2, 106, 7, 107, 10, 30, 
+  [503] =
+    2, 50, 46, 55, 46, 
+  [508] =
+    1, 23, 108, 
+  [511] =
+    2, 77, 237, 0, 78, 240, 0, 
+  [518] =
+    3, 2, 109, 7, 108, 10, 30, 
+  [525] =
+    1, 23, 110, 
+  [528] =
+    2, 112, 237, 0, 111, 240, 0, 
   [535] =
     2, 114, 237, 0, 113, 240, 0, 
   [542] =
+    2, 103, 237, 0, 102, 330, 0, 
+  [549] =
     2, 115, 3, 2, 7, 10, 116, 3, 29, 31, 32, 
-  [553] =
+  [560] =
     1, 56, 88, 
-  [556] =
-    3, 2, 117, 7, 117, 10, 30, 
   [563] =
+    3, 2, 117, 7, 117, 10, 30, 
+  [570] =
     2, 50, 94, 55, 94, 
-  [568] =
+  [575] =
     1, 118, 3, 8, 23, 24, 
-  [574] =
-    3, 8, 92, 23, 119, 24, 120, 
   [581] =
-    1, 48, 70, 
-  [584] =
-    2, 8, 92, 23, 121, 
-  [589] =
+    3, 8, 98, 23, 119, 24, 120, 
+  [588] =
+    1, 48, 71, 
+  [591] =
+    2, 8, 98, 23, 121, 
+  [596] =
     1, 48, 49, 
-  [592] =
-    2, 123, 237, 0, 122, 240, 0, 
   [599] =
-    2, 106, 237, 0, 105, 330, 0, 
-  [606] =
-    3, 2, 124, 7, 124, 10, 125, 
-  [613] =
-    2, 50, 65535, 55, 65535, 
-  [618] =
-    2, 2, 127, 4, 128, 
+    1, 2, 122, 
+  [602] =
+    2, 124, 237, 0, 123, 240, 0, 
+  [609] =
+    2, 112, 237, 0, 111, 330, 0, 
+  [616] =
+    3, 2, 125, 7, 125, 10, 126, 
   [623] =
+    2, 50, 65535, 55, 65535, 
+  [628] =
+    2, 2, 128, 4, 129, 
+  [633] =
     1, 54, 103, 
-  [626] =
-    1, 2, 129, 
-  [629] =
-    1, 4, 130, 
-  [632] =
-    2, 38, 59, 54, 58, 
-  [637] =
-    1, 3, 131, 
-  [640] =
-    1, 23, 132, 
-  [643] =
-    2, 133, 237, 0, 134, 330, 0, 
+  [636] =
+    1, 2, 130, 
+  [639] =
+    1, 4, 131, 
+  [642] =
+    2, 38, 61, 54, 60, 
+  [647] =
+    1, 3, 132, 
   [650] =
-    2, 135, 237, 0, 136, 330, 0, 
-  [657] =
-    2, 97, 237, 0, 96, 330, 0, 
-  [664] =
-    3, 2, 137, 7, 138, 10, 30, 
-  [671] =
-    1, 2, 139, 
+    1, 23, 133, 
+  [653] =
+    2, 134, 237, 0, 135, 330, 0, 
+  [660] =
+    2, 136, 237, 0, 137, 330, 0, 
+  [667] =
+    2, 138, 237, 0, 139, 330, 0, 
   [674] =
-    2, 141, 237, 0, 140, 240, 0, 
+    3, 2, 140, 7, 141, 10, 30, 
   [681] =
+    2, 136, 237, 0, 137, 240, 0, 
+  [688] =
     0, 0, 
-  [683] =
-    681, 0, 167, 32768, 
-  [687] =
-    2, 143, 237, 0, 142, 240, 0, 
+  [690] =
+    688, 0, 167, 32768, 
   [694] =
-    2, 145, 237, 0, 144, 240, 0, 
+    2, 143, 237, 0, 142, 240, 0, 
   [701] =
-    2, 147, 237, 0, 146, 240, 0, 
+    2, 145, 237, 0, 144, 240, 0, 
   [708] =
-    2, 149, 237, 0, 148, 240, 0, 
+    2, 147, 237, 0, 146, 240, 0, 
   [715] =
-    2, 135, 237, 0, 136, 240, 0, 
+    2, 149, 237, 0, 148, 240, 0, 
   [722] =
-    2, 151, 237, 0, 150, 240, 0, 
+    2, 138, 237, 0, 139, 240, 0, 
   [729] =
-    2, 153, 237, 0, 152, 240, 0, 
+    2, 151, 237, 0, 150, 240, 0, 
   [736] =
-    2, 155, 237, 0, 154, 240, 0, 
+    2, 153, 237, 0, 152, 240, 0, 
   [743] =
-    2, 155, 237, 0, 154, 330, 0, 
+    2, 155, 237, 0, 154, 240, 0, 
   [750] =
-    2, 153, 237, 0, 152, 330, 0, 
+    2, 155, 237, 0, 154, 330, 0, 
   [757] =
-    2, 141, 237, 0, 140, 330, 0, 
+    2, 153, 237, 0, 152, 330, 0, 
   [764] =
     2, 143, 237, 0, 142, 330, 0, 
   [771] =
@@ -1297,11 +1297,11 @@ static const uint16_t ts_small_parse_table[] = {
   [785] =
     2, 149, 237, 0, 148, 330, 0, 
   [792] =
-    2, 89, 237, 0, 88, 330, 0, 
+    2, 95, 237, 0, 94, 330, 0, 
   [799] =
     2, 114, 237, 0, 113, 330, 0, 
   [806] =
-    2, 123, 237, 0, 122, 330, 0, 
+    2, 124, 237, 0, 123, 330, 0, 
   [813] =
     2, 151, 237, 0, 150, 330, 0, 
   [820] =
@@ -1335,7 +1335,7 @@ static const uint16_t ts_small_parse_table[] = {
   [893] =
     890, 0, 887, 32768, 
   [897] =
-    3, 2, 137, 7, 167, 10, 30, 
+    3, 2, 140, 7, 167, 10, 30, 
   [904] =
     3, 1, 132, 
   [907] =
@@ -1345,13 +1345,13 @@ static const uint16_t ts_small_parse_table[] = {
   [918] =
     3, 2, 169, 7, 169, 10, 30, 
   [925] =
-    4, 13, 107, 14, 170, 29, 170, 31, 170, 
+    4, 13, 86, 14, 170, 29, 170, 31, 170, 
   [934] =
     1, 57, 96, 
   [937] =
     871, 0, 934, 32768, 
   [941] =
-    4, 13, 111, 14, 170, 29, 170, 31, 170, 
+    4, 13, 90, 14, 170, 29, 170, 31, 170, 
   [950] =
     871, 0, 167, 32768, 
   [954] =
@@ -1415,7 +1415,7 @@ static const uint16_t ts_small_parse_table[] = {
   [1077] =
     1, 22, 73, 
   [1080] =
-    1, 21, 84, 
+    1, 21, 79, 
   [1083] =
     1, 3, 191, 
 };
@@ -1436,71 +1436,71 @@ static const uint32_t ts_small_parse_table_map[] = {
   [SMALL_STATE(20) * 2] = 2147483963, 2147483970,
   [SMALL_STATE(21) * 2] = 2147483975, 2147483815,
   [SMALL_STATE(22) * 2] = 3221225805, 2147483815,
-  [SMALL_STATE(23) * 2] = 2147483988, 2147483815,
-  [SMALL_STATE(24) * 2] = 3221225815, 2147483815,
-  [SMALL_STATE(25) * 2] = 2147483998, 2147483815,
-  [SMALL_STATE(26) * 2] = 2147484007, 2147484018,
-  [SMALL_STATE(27) * 2] = 2147484023, 2147483815,
-  [SMALL_STATE(28) * 2] = 2147484028, 2147483815,
-  [SMALL_STATE(29) * 2] = 383, 2147483815,
-  [SMALL_STATE(30) * 2] = 2147484037, 2147484044,
-  [SMALL_STATE(31) * 2] = 3221225873, 2147483815,
-  [SMALL_STATE(32) * 2] = 2147484056, 2147484063,
-  [SMALL_STATE(33) * 2] = 420, 2147483815,
-  [SMALL_STATE(34) * 2] = 2147484074, 2147484081,
-  [SMALL_STATE(35) * 2] = 2147484084, 2147484089,
-  [SMALL_STATE(36) * 2] = 3221225916, 2147483815,
-  [SMALL_STATE(37) * 2] = 2147484099, 2147483815,
-  [SMALL_STATE(38) * 2] = 2147484102, 2147483815,
-  [SMALL_STATE(39) * 2] = 2147484105, 2147484112,
-  [SMALL_STATE(40) * 2] = 2147484117, 2147483815,
-  [SMALL_STATE(41) * 2] = 3221225944, 2147483815,
-  [SMALL_STATE(42) * 2] = 2147484127, 2147484044,
-  [SMALL_STATE(43) * 2] = 2147484134, 2147483815,
-  [SMALL_STATE(44) * 2] = 3221225961, 2147483815,
-  [SMALL_STATE(45) * 2] = 2147484144, 2147484153,
-  [SMALL_STATE(46) * 2] = 2147484156, 2147483815,
-  [SMALL_STATE(47) * 2] = 2147484165, 2147484174,
-  [SMALL_STATE(48) * 2] = 529, 2147483815,
+  [SMALL_STATE(23) * 2] = 3221225812, 2147483815,
+  [SMALL_STATE(24) * 2] = 2147483995, 2147483815,
+  [SMALL_STATE(25) * 2] = 2147484000, 2147483815,
+  [SMALL_STATE(26) * 2] = 2147484003, 2147483815,
+  [SMALL_STATE(27) * 2] = 2147484006, 2147483815,
+  [SMALL_STATE(28) * 2] = 2147484015, 2147484026,
+  [SMALL_STATE(29) * 2] = 2147484031, 2147484040,
+  [SMALL_STATE(30) * 2] = 2147484043, 2147483815,
+  [SMALL_STATE(31) * 2] = 2147484052, 2147484061,
+  [SMALL_STATE(32) * 2] = 416, 2147483815,
+  [SMALL_STATE(33) * 2] = 422, 2147483815,
+  [SMALL_STATE(34) * 2] = 2147484076, 2147484083,
+  [SMALL_STATE(35) * 2] = 3221225912, 2147483815,
+  [SMALL_STATE(36) * 2] = 2147484095, 2147484102,
+  [SMALL_STATE(37) * 2] = 459, 2147483815,
+  [SMALL_STATE(38) * 2] = 2147484113, 2147484120,
+  [SMALL_STATE(39) * 2] = 2147484123, 2147484128,
+  [SMALL_STATE(40) * 2] = 3221225955, 2147483815,
+  [SMALL_STATE(41) * 2] = 2147484138, 2147483815,
+  [SMALL_STATE(42) * 2] = 2147484141, 2147483815,
+  [SMALL_STATE(43) * 2] = 2147484144, 2147484151,
+  [SMALL_STATE(44) * 2] = 2147484156, 2147483815,
+  [SMALL_STATE(45) * 2] = 3221225983, 2147483815,
+  [SMALL_STATE(46) * 2] = 2147484166, 2147484083,
+  [SMALL_STATE(47) * 2] = 2147484173, 2147483815,
+  [SMALL_STATE(48) * 2] = 3221226000, 2147483815,
   [SMALL_STATE(49) * 2] = 3221226007, 2147483815,
-  [SMALL_STATE(50) * 2] = 542, 2147484201,
-  [SMALL_STATE(51) * 2] = 2147484204, 2147484211,
-  [SMALL_STATE(52) * 2] = 568, 2147483815,
-  [SMALL_STATE(53) * 2] = 2147484222, 2147484229,
-  [SMALL_STATE(54) * 2] = 2147484232, 2147484237,
-  [SMALL_STATE(55) * 2] = 3221226064, 2147483815,
-  [SMALL_STATE(56) * 2] = 3221226071, 2147483815,
-  [SMALL_STATE(57) * 2] = 2147484254, 2147484261,
-  [SMALL_STATE(58) * 2] = 2147484266, 2147484271,
-  [SMALL_STATE(59) * 2] = 2147484274, 2147483815,
-  [SMALL_STATE(60) * 2] = 2147484277, 2147484280,
-  [SMALL_STATE(61) * 2] = 2147484285, 2147483815,
-  [SMALL_STATE(62) * 2] = 2147484288, 2147483815,
-  [SMALL_STATE(63) * 2] = 3221226115, 2147483815,
-  [SMALL_STATE(64) * 2] = 3221226122, 2147483815,
-  [SMALL_STATE(65) * 2] = 3221226129, 2147483815,
-  [SMALL_STATE(66) * 2] = 2147484312, 2147484044,
-  [SMALL_STATE(67) * 2] = 2147484319, 2147483815,
-  [SMALL_STATE(68) * 2] = 3221226146, 536871595,
-  [SMALL_STATE(69) * 2] = 3221226159, 536871595,
-  [SMALL_STATE(70) * 2] = 3221226166, 536871595,
-  [SMALL_STATE(71) * 2] = 3221226173, 536871595,
-  [SMALL_STATE(72) * 2] = 3221226180, 536871595,
-  [SMALL_STATE(73) * 2] = 3221226187, 536871595,
-  [SMALL_STATE(74) * 2] = 3221226194, 536871595,
-  [SMALL_STATE(75) * 2] = 3221226201, 536871595,
-  [SMALL_STATE(76) * 2] = 3221226208, 536871595,
-  [SMALL_STATE(77) * 2] = 3221226215, 536871595,
-  [SMALL_STATE(78) * 2] = 3221226222, 536871595,
-  [SMALL_STATE(79) * 2] = 3221226229, 536871595,
-  [SMALL_STATE(80) * 2] = 3221226236, 536871595,
-  [SMALL_STATE(81) * 2] = 3221226243, 536871595,
-  [SMALL_STATE(82) * 2] = 3221226250, 536871595,
-  [SMALL_STATE(83) * 2] = 3221226257, 536871595,
-  [SMALL_STATE(84) * 2] = 3221226264, 536871595,
-  [SMALL_STATE(85) * 2] = 3221226271, 536871595,
-  [SMALL_STATE(86) * 2] = 3221226278, 536871595,
-  [SMALL_STATE(87) * 2] = 3221226285, 536871595,
+  [SMALL_STATE(50) * 2] = 3221226014, 2147483815,
+  [SMALL_STATE(51) * 2] = 549, 2147484208,
+  [SMALL_STATE(52) * 2] = 2147484211, 2147484218,
+  [SMALL_STATE(53) * 2] = 575, 2147483815,
+  [SMALL_STATE(54) * 2] = 2147484229, 2147484236,
+  [SMALL_STATE(55) * 2] = 2147484239, 2147484244,
+  [SMALL_STATE(56) * 2] = 2147484247, 2147483815,
+  [SMALL_STATE(57) * 2] = 3221226074, 2147483815,
+  [SMALL_STATE(58) * 2] = 3221226081, 2147483815,
+  [SMALL_STATE(59) * 2] = 2147484264, 2147484271,
+  [SMALL_STATE(60) * 2] = 2147484276, 2147484281,
+  [SMALL_STATE(61) * 2] = 2147484284, 2147483815,
+  [SMALL_STATE(62) * 2] = 2147484287, 2147484290,
+  [SMALL_STATE(63) * 2] = 2147484295, 2147483815,
+  [SMALL_STATE(64) * 2] = 2147484298, 2147483815,
+  [SMALL_STATE(65) * 2] = 3221226125, 2147483815,
+  [SMALL_STATE(66) * 2] = 3221226132, 2147483815,
+  [SMALL_STATE(67) * 2] = 3221226139, 2147483815,
+  [SMALL_STATE(68) * 2] = 2147484322, 2147484083,
+  [SMALL_STATE(69) * 2] = 3221226153, 536871602,
+  [SMALL_STATE(70) * 2] = 3221226166, 536871602,
+  [SMALL_STATE(71) * 2] = 3221226173, 536871602,
+  [SMALL_STATE(72) * 2] = 3221226180, 536871602,
+  [SMALL_STATE(73) * 2] = 3221226187, 536871602,
+  [SMALL_STATE(74) * 2] = 3221226194, 536871602,
+  [SMALL_STATE(75) * 2] = 3221226201, 536871602,
+  [SMALL_STATE(76) * 2] = 3221226208, 536871602,
+  [SMALL_STATE(77) * 2] = 3221226215, 536871602,
+  [SMALL_STATE(78) * 2] = 3221226222, 536871602,
+  [SMALL_STATE(79) * 2] = 3221226229, 536871602,
+  [SMALL_STATE(80) * 2] = 3221226236, 536871602,
+  [SMALL_STATE(81) * 2] = 3221226243, 536871602,
+  [SMALL_STATE(82) * 2] = 3221226250, 536871602,
+  [SMALL_STATE(83) * 2] = 3221226257, 536871602,
+  [SMALL_STATE(84) * 2] = 3221226264, 536871602,
+  [SMALL_STATE(85) * 2] = 3221226271, 536871602,
+  [SMALL_STATE(86) * 2] = 3221226278, 536871602,
+  [SMALL_STATE(87) * 2] = 3221226285, 536871602,
   [SMALL_STATE(88) * 2] = 820, 536871749,
   [SMALL_STATE(89) * 2] = 841, 536871767,
   [SMALL_STATE(90) * 2] = 2147484507, 536871786,
@@ -1512,38 +1512,38 @@ static const uint32_t ts_small_parse_table_map[] = {
   [SMALL_STATE(96) * 2] = 2147484589, 536871862,
   [SMALL_STATE(97) * 2] = 2147484602, 536871879,
   [SMALL_STATE(98) * 2] = 2147484619, 536871893,
-  [SMALL_STATE(99) * 2] = 2147484633, 536871595,
-  [SMALL_STATE(100) * 2] = 994, 536871595,
+  [SMALL_STATE(99) * 2] = 2147484633, 536871602,
+  [SMALL_STATE(100) * 2] = 994, 536871602,
   [SMALL_STATE(101) * 2] = 2147484648, 536871920,
-  [SMALL_STATE(102) * 2] = 1012, 536871595,
+  [SMALL_STATE(102) * 2] = 1012, 536871602,
   [SMALL_STATE(103) * 2] = 2147484666, 536871941,
   [SMALL_STATE(104) * 2] = 2147484681, 536871953,
-  [SMALL_STATE(105) * 2] = 1045, 536871595,
-  [SMALL_STATE(106) * 2] = 2147484277, 536871970,
-  [SMALL_STATE(107) * 2] = 2147484710, 536871595,
-  [SMALL_STATE(108) * 2] = 2147484713, 536871595,
-  [SMALL_STATE(109) * 2] = 2147484716, 536871595,
-  [SMALL_STATE(110) * 2] = 2147484719, 536871595,
-  [SMALL_STATE(111) * 2] = 2147484722, 536871595,
-  [SMALL_STATE(112) * 2] = 2147484725, 536871595,
-  [SMALL_STATE(113) * 2] = 2147484728, 536871595,
-  [SMALL_STATE(114) * 2] = 2147484731, 536871595,
+  [SMALL_STATE(105) * 2] = 1045, 536871602,
+  [SMALL_STATE(106) * 2] = 2147484287, 536871970,
+  [SMALL_STATE(107) * 2] = 2147484710, 536871602,
+  [SMALL_STATE(108) * 2] = 2147484713, 536871602,
+  [SMALL_STATE(109) * 2] = 2147484716, 536871602,
+  [SMALL_STATE(110) * 2] = 2147484719, 536871602,
+  [SMALL_STATE(111) * 2] = 2147484722, 536871602,
+  [SMALL_STATE(112) * 2] = 2147484725, 536871602,
+  [SMALL_STATE(113) * 2] = 2147484728, 536871602,
+  [SMALL_STATE(114) * 2] = 2147484731, 536871602,
 };
 
 static const uint32_t ts_parse_actions[] = {
   [0] = ACTION_LIST(0, false),
   [1] = ACTION_LIST(1, false) | RECOVER(),
   [2] = ACTION_LIST(1, true) | REDUCE(192),
-  [3] = ACTION_LIST(1, false) | SHIFT(61),
+  [3] = ACTION_LIST(1, false) | SHIFT(63),
   [4] = ACTION_LIST(1, false) | SHIFT(13),
   [5] = ACTION_LIST(1, false) | SHIFT(10),
-  [6] = ACTION_LIST(1, false) | SHIFT(38),
+  [6] = ACTION_LIST(1, false) | SHIFT(42),
   [7] = ACTION_LIST(1, true) | SHIFT(10),
   [8] = ACTION_LIST(1, true) | SHIFT(107),
   [9] = ACTION_LIST(1, false) | SHIFT(114),
   [10] = ACTION_LIST(1, false) | SHIFT(6),
   [11] = ACTION_LIST(1, false) | SHIFT(8),
-  [12] = ACTION_LIST(1, false) | SHIFT(27),
+  [12] = ACTION_LIST(1, false) | SHIFT(24),
   [13] = ACTION_LIST(1, true) | SHIFT(8),
   [14] = ACTION_LIST(1, true) | SHIFT(3),
   [15] = ACTION_LIST(1, true) | SHIFT(110),
@@ -1553,15 +1553,15 @@ static const uint32_t ts_parse_actions[] = {
   [19] = ACTION_LIST(1, true) | REDUCE(196),
   [20] = ACTION_LIST(1, false) | SHIFT(2),
   [21] = ACTION_LIST(1, true) | SHIFT(2),
-  [22] = ACTION_LIST(1, true) | SHIFT(79),
+  [22] = ACTION_LIST(1, true) | SHIFT(66),
   [23] = ACTION_LIST(1, true) | SHIFT(7),
-  [24] = ACTION_LIST(1, true) | SHIFT(32),
-  [25] = ACTION_LIST(1, true) | SHIFT(51),
+  [24] = ACTION_LIST(1, true) | SHIFT(36),
+  [25] = ACTION_LIST(1, true) | SHIFT(52),
   [26] = ACTION_LIST(1, true) | SHIFT(108),
   [27] = ACTION_LIST(1, true) | SHIFT(20),
   [28] = ACTION_LIST(1, true) | SHIFT(4),
   [29] = ACTION_LIST(1, true) | SHIFT(82),
-  [30] = ACTION_LIST(1, true) | SHIFT(25),
+  [30] = ACTION_LIST(1, true) | SHIFT(27),
   [31] = ACTION_LIST(2, false) | REDUCE(198), SHIFT_REPEAT(114),
   [33] = ACTION_LIST(2, false) | REDUCE(198), SHIFT_REPEAT(6),
   [35] = ACTION_LIST(2, false) | REDUCE(198), SHIFT_REPEAT(8),
@@ -1575,91 +1575,91 @@ static const uint32_t ts_parse_actions[] = {
   [47] = ACTION_LIST(1, false) | SHIFT(12),
   [48] = ACTION_LIST(1, true) | SHIFT(12),
   [49] = ACTION_LIST(1, true) | ACCEPT_INPUT(),
-  [50] = ACTION_LIST(2, false) | REDUCE(198), SHIFT_REPEAT(61),
+  [50] = ACTION_LIST(2, false) | REDUCE(198), SHIFT_REPEAT(63),
   [52] = ACTION_LIST(2, false) | REDUCE(198), SHIFT_REPEAT(13),
   [54] = ACTION_LIST(2, false) | REDUCE(198), SHIFT_REPEAT(12),
-  [56] = ACTION_LIST(2, false) | REDUCE(198), SHIFT_REPEAT(38),
+  [56] = ACTION_LIST(2, false) | REDUCE(198), SHIFT_REPEAT(42),
   [58] = ACTION_LIST(2, true) | REDUCE(198), SHIFT_REPEAT(12),
   [60] = ACTION_LIST(2, true) | REDUCE(198), SHIFT_REPEAT(107),
   [62] = ACTION_LIST(1, true) | SHIFT(14),
   [63] = ACTION_LIST(1, true) | SHIFT(109),
-  [64] = ACTION_LIST(1, true) | SHIFT(39),
-  [65] = ACTION_LIST(1, true) | SHIFT(71),
+  [64] = ACTION_LIST(1, true) | SHIFT(43),
+  [65] = ACTION_LIST(1, true) | SHIFT(72),
   [66] = ACTION_LIST(1, true) | REDUCE(202),
   [67] = ACTION_LIST(1, false) | REDUCE(202),
   [68] = ACTION_LIST(1, true) | SHIFT(15),
   [69] = ACTION_LIST(1, false) | SHIFT(9),
   [70] = ACTION_LIST(1, true) | SHIFT(9),
-  [71] = ACTION_LIST(1, true) | SHIFT(68),
+  [71] = ACTION_LIST(1, true) | SHIFT(69),
   [72] = ACTION_LIST(1, true) | SHIFT(17),
-  [73] = ACTION_LIST(1, true) | SHIFT(67),
+  [73] = ACTION_LIST(1, true) | SHIFT(56),
   [74] = ACTION_LIST(1, true) | SHIFT(21),
-  [75] = ACTION_LIST(1, true) | SHIFT(64),
+  [75] = ACTION_LIST(1, true) | SHIFT(67),
   [76] = ACTION_LIST(1, true) | SHIFT(22),
   [77] = ACTION_LIST(1, false) | REDUCE(204),
   [78] = ACTION_LIST(1, true) | REDUCE(204),
-  [79] = ACTION_LIST(1, true) | REDUCE(206),
-  [80] = ACTION_LIST(1, true) | SHIFT(26),
-  [81] = ACTION_LIST(1, true) | SHIFT(50),
-  [82] = ACTION_LIST(1, true) | SHIFT(95),
-  [83] = ACTION_LIST(1, true) | SHIFT(45),
-  [84] = ACTION_LIST(1, true) | SHIFT(28),
-  [85] = ACTION_LIST(1, true) | SHIFT(24),
-  [86] = ACTION_LIST(1, true) | REDUCE(208),
-  [87] = ACTION_LIST(1, true) | SHIFT(62),
-  [88] = ACTION_LIST(1, true) | REDUCE(210),
-  [89] = ACTION_LIST(1, false) | REDUCE(210),
-  [90] = ACTION_LIST(1, true) | SHIFT(33),
-  [91] = ACTION_LIST(1, true) | REDUCE(212),
-  [92] = ACTION_LIST(1, true) | SHIFT(23),
-  [93] = ACTION_LIST(1, true) | SHIFT(69),
-  [94] = ACTION_LIST(1, true) | SHIFT(35),
-  [95] = ACTION_LIST(1, true) | SHIFT(31),
-  [96] = ACTION_LIST(1, true) | REDUCE(214),
-  [97] = ACTION_LIST(1, false) | REDUCE(214),
-  [98] = ACTION_LIST(1, true) | SHIFT(36),
-  [99] = ACTION_LIST(1, true) | SHIFT(37),
-  [100] = ACTION_LIST(1, true) | SHIFT(40),
-  [101] = ACTION_LIST(1, true) | SHIFT(73),
-  [102] = ACTION_LIST(1, true) | SHIFT(41),
-  [103] = ACTION_LIST(1, true) | SHIFT(43),
-  [104] = ACTION_LIST(1, true) | SHIFT(44),
-  [105] = ACTION_LIST(1, true) | REDUCE(216),
-  [106] = ACTION_LIST(1, false) | REDUCE(216),
-  [107] = ACTION_LIST(1, false) | SHIFT(100),
-  [108] = ACTION_LIST(1, true) | SHIFT(46),
-  [109] = ACTION_LIST(1, false) | REDUCE(218),
-  [110] = ACTION_LIST(1, true) | REDUCE(218),
-  [111] = ACTION_LIST(1, false) | SHIFT(48),
-  [112] = ACTION_LIST(1, true) | REDUCE(220),
+  [79] = ACTION_LIST(1, true) | SHIFT(25),
+  [80] = ACTION_LIST(1, true) | SHIFT(23),
+  [81] = ACTION_LIST(1, true) | REDUCE(206),
+  [82] = ACTION_LIST(1, true) | SHIFT(28),
+  [83] = ACTION_LIST(1, true) | SHIFT(51),
+  [84] = ACTION_LIST(1, true) | SHIFT(95),
+  [85] = ACTION_LIST(1, true) | SHIFT(29),
+  [86] = ACTION_LIST(1, false) | SHIFT(100),
+  [87] = ACTION_LIST(1, true) | SHIFT(30),
+  [88] = ACTION_LIST(1, false) | REDUCE(208),
+  [89] = ACTION_LIST(1, true) | REDUCE(208),
+  [90] = ACTION_LIST(1, false) | SHIFT(32),
+  [91] = ACTION_LIST(1, true) | REDUCE(210),
+  [92] = ACTION_LIST(1, true) | REDUCE(212),
+  [93] = ACTION_LIST(1, true) | SHIFT(64),
+  [94] = ACTION_LIST(1, true) | REDUCE(214),
+  [95] = ACTION_LIST(1, false) | REDUCE(214),
+  [96] = ACTION_LIST(1, true) | SHIFT(37),
+  [97] = ACTION_LIST(1, true) | REDUCE(216),
+  [98] = ACTION_LIST(1, true) | SHIFT(26),
+  [99] = ACTION_LIST(1, true) | SHIFT(70),
+  [100] = ACTION_LIST(1, true) | SHIFT(39),
+  [101] = ACTION_LIST(1, true) | SHIFT(35),
+  [102] = ACTION_LIST(1, true) | REDUCE(218),
+  [103] = ACTION_LIST(1, false) | REDUCE(218),
+  [104] = ACTION_LIST(1, true) | SHIFT(40),
+  [105] = ACTION_LIST(1, true) | SHIFT(41),
+  [106] = ACTION_LIST(1, true) | SHIFT(44),
+  [107] = ACTION_LIST(1, true) | SHIFT(74),
+  [108] = ACTION_LIST(1, true) | SHIFT(45),
+  [109] = ACTION_LIST(1, true) | SHIFT(47),
+  [110] = ACTION_LIST(1, true) | SHIFT(48),
+  [111] = ACTION_LIST(1, true) | REDUCE(220),
+  [112] = ACTION_LIST(1, false) | REDUCE(220),
   [113] = ACTION_LIST(1, true) | REDUCE(222),
   [114] = ACTION_LIST(1, false) | REDUCE(222),
   [115] = ACTION_LIST(1, true) | REDUCE(224),
   [116] = ACTION_LIST(1, true) | SHIFT(88),
-  [117] = ACTION_LIST(1, true) | SHIFT(52),
+  [117] = ACTION_LIST(1, true) | SHIFT(53),
   [118] = ACTION_LIST(1, true) | REDUCE(226),
-  [119] = ACTION_LIST(1, true) | SHIFT(70),
-  [120] = ACTION_LIST(1, true) | SHIFT(54),
+  [119] = ACTION_LIST(1, true) | SHIFT(71),
+  [120] = ACTION_LIST(1, true) | SHIFT(55),
   [121] = ACTION_LIST(1, true) | SHIFT(49),
-  [122] = ACTION_LIST(1, true) | REDUCE(228),
-  [123] = ACTION_LIST(1, false) | REDUCE(228),
-  [124] = ACTION_LIST(1, true) | REDUCE(230),
-  [125] = ACTION_LIST(2, true) | REDUCE(230), SHIFT_REPEAT(25),
-  [127] = ACTION_LIST(1, false) | REDUCE(232),
-  [128] = ACTION_LIST(1, true) | SHIFT(103),
-  [129] = ACTION_LIST(1, true) | SHIFT(55),
-  [130] = ACTION_LIST(1, true) | SHIFT(58),
+  [122] = ACTION_LIST(1, true) | SHIFT(50),
+  [123] = ACTION_LIST(1, true) | REDUCE(228),
+  [124] = ACTION_LIST(1, false) | REDUCE(228),
+  [125] = ACTION_LIST(1, true) | REDUCE(230),
+  [126] = ACTION_LIST(2, true) | REDUCE(230), SHIFT_REPEAT(27),
+  [128] = ACTION_LIST(1, false) | REDUCE(232),
+  [129] = ACTION_LIST(1, true) | SHIFT(103),
+  [130] = ACTION_LIST(1, true) | SHIFT(57),
   [131] = ACTION_LIST(1, true) | SHIFT(60),
-  [132] = ACTION_LIST(1, true) | SHIFT(56),
-  [133] = ACTION_LIST(1, false) | REDUCE(234),
-  [134] = ACTION_LIST(1, true) | REDUCE(234),
-  [135] = ACTION_LIST(1, false) | REDUCE(236),
-  [136] = ACTION_LIST(1, true) | REDUCE(236),
-  [137] = ACTION_LIST(1, true) | SHIFT(63),
-  [138] = ACTION_LIST(1, true) | SHIFT(87),
-  [139] = ACTION_LIST(1, true) | SHIFT(65),
-  [140] = ACTION_LIST(1, true) | REDUCE(238),
-  [141] = ACTION_LIST(1, false) | REDUCE(238),
+  [132] = ACTION_LIST(1, true) | SHIFT(62),
+  [133] = ACTION_LIST(1, true) | SHIFT(58),
+  [134] = ACTION_LIST(1, false) | REDUCE(234),
+  [135] = ACTION_LIST(1, true) | REDUCE(234),
+  [136] = ACTION_LIST(1, false) | REDUCE(236),
+  [137] = ACTION_LIST(1, true) | REDUCE(236),
+  [138] = ACTION_LIST(1, false) | REDUCE(238),
+  [139] = ACTION_LIST(1, true) | REDUCE(238),
+  [140] = ACTION_LIST(1, true) | SHIFT(65),
+  [141] = ACTION_LIST(1, true) | SHIFT(87),
   [142] = ACTION_LIST(1, true) | REDUCE(240),
   [143] = ACTION_LIST(1, false) | REDUCE(240),
   [144] = ACTION_LIST(1, true) | REDUCE(242),
@@ -1681,8 +1681,8 @@ static const uint32_t ts_parse_actions[] = {
   [161] = ACTION_LIST(1, false) | REDUCE(258),
   [162] = ACTION_LIST(2, true) | REDUCE(258), SHIFT_REPEAT(99),
   [164] = ACTION_LIST(1, false) | REDUCE(260),
-  [165] = ACTION_LIST(2, true) | REDUCE(260), SHIFT_REPEAT(46),
-  [167] = ACTION_LIST(1, true) | SHIFT(74),
+  [165] = ACTION_LIST(2, true) | REDUCE(260), SHIFT_REPEAT(30),
+  [167] = ACTION_LIST(1, true) | SHIFT(75),
   [168] = ACTION_LIST(1, true) | SHIFT(102),
   [169] = ACTION_LIST(1, true) | SHIFT(105),
   [170] = ACTION_LIST(1, true) | SHIFT(99),
@@ -1700,10 +1700,10 @@ static const uint32_t ts_parse_actions[] = {
   [182] = ACTION_LIST(2, true) | REDUCE(268), SHIFT_REPEAT(103),
   [184] = ACTION_LIST(1, true) | SHIFT(85),
   [185] = ACTION_LIST(1, true) | REDUCE(270),
-  [186] = ACTION_LIST(1, true) | SHIFT(75),
+  [186] = ACTION_LIST(1, true) | SHIFT(76),
   [187] = ACTION_LIST(1, true) | SHIFT(83),
-  [188] = ACTION_LIST(1, true) | SHIFT(72),
-  [189] = ACTION_LIST(1, true) | SHIFT(78),
+  [188] = ACTION_LIST(1, true) | SHIFT(73),
+  [189] = ACTION_LIST(1, true) | SHIFT(79),
   [190] = ACTION_LIST(1, true) | SHIFT(86),
   [191] = ACTION_LIST(1, true) | SHIFT(106),
   [192] = REDUCE_RECORD(sym_document, 0, 0, 0),
@@ -1714,13 +1714,13 @@ static const uint32_t ts_parse_actions[] = {
   [202] = REDUCE_RECORD(sym_end_tag, 3, 0, 0),
   [204] = REDUCE_RECORD(sym_void_element, 4, 0, 0),
   [206] = REDUCE_RECORD(sym_attribute, 1, 0, 0),
-  [208] = REDUCE_RECORD(sym_attribute, 3, 0, 0),
-  [210] = REDUCE_RECORD(sym_script_element, 3, 0, 0),
-  [212] = REDUCE_RECORD(sym_script_start_tag, 3, 0, 0),
-  [214] = REDUCE_RECORD(sym_erroneous_end_tag, 3, 0, 0),
-  [216] = REDUCE_RECORD(sym_void_element, 5, 0, 0),
-  [218] = REDUCE_RECORD(aux_sym_quoted_attribute_value_repeat2, 1, 0, 0),
-  [220] = REDUCE_RECORD(sym_quoted_attribute_value, 3, 0, 1),
+  [208] = REDUCE_RECORD(aux_sym_quoted_attribute_value_repeat2, 1, 0, 0),
+  [210] = REDUCE_RECORD(sym_quoted_attribute_value, 3, 0, 1),
+  [212] = REDUCE_RECORD(sym_attribute, 3, 0, 0),
+  [214] = REDUCE_RECORD(sym_script_element, 3, 0, 0),
+  [216] = REDUCE_RECORD(sym_script_start_tag, 3, 0, 0),
+  [218] = REDUCE_RECORD(sym_erroneous_end_tag, 3, 0, 0),
+  [220] = REDUCE_RECORD(sym_void_element, 5, 0, 0),
   [222] = REDUCE_RECORD(sym_style_element, 3, 0, 0),
   [224] = REDUCE_RECORD(sym_attribute_value, 1, 0, 0),
   [226] = REDUCE_RECORD(sym_style_start_tag, 3, 0, 0),
@@ -1728,8 +1728,8 @@ static const uint32_t ts_parse_actions[] = {
   [230] = REDUCE_RECORD(aux_sym_void_element_repeat1, 2, 0, 0),
   [232] = REDUCE_RECORD(sym_doctype_value, 1, 0, 0),
   [234] = REDUCE_RECORD(sym_start_tag, 4, 0, 0),
-  [236] = REDUCE_RECORD(sym_void_element, 3, 0, 0),
-  [238] = REDUCE_RECORD(sym_element, 2, 0, 0),
+  [236] = REDUCE_RECORD(sym_element, 2, 0, 0),
+  [238] = REDUCE_RECORD(sym_void_element, 3, 0, 0),
   [240] = REDUCE_RECORD(sym_script_element, 2, 0, 0),
   [242] = REDUCE_RECORD(sym_style_element, 2, 0, 0),
   [244] = REDUCE_RECORD(sym_self_closing_tag, 3, 0, 0),
