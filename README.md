@@ -54,12 +54,17 @@ runs. Custom tag names are retained in full when they fit the remaining buffer. 
 omitted along with older tags. Lost tag identities can still produce recovery errors when those tags close.
 Malformed input after a void element can replace its enclosing element with an `ERROR` node during recovery.
 
-Attribute values retain their complete `attribute_value` range and expose recognized named and numeric character
-references as `entity` children. Quoted values retain their `quoted_attribute_value` wrapper. Other value content,
-including literal ampersands, has no child nodes, so injections targeting `attribute_value` retain it by default. Set `injection.include-children` when the injected language needs the original reference
-spellings. Legacy names without a semicolon remain literal before an ASCII letter, digit, or `=`; unknown
-names and incomplete numeric prefixes remain literal. Comments are document or element content, and are not accepted
-between attributes. Comment-shaped text inside a quoted value remains part of that value.
+Attribute values use distinct `unquoted_attribute_value`, `singlequoted_attribute_value`, and
+`doublequoted_attribute_value` nodes directly inside `attribute`. Quoted nodes include both delimiters and retain an
+`attribute_value` child for nonempty content; empty quoted values have no content child. Unquoted nodes cover the value
+without surrounding whitespace. Recognized named and numeric character references are `entity` children of the content
+node. Other content, including literal ampersands, has no child nodes. Injections that need quote-free value content can
+capture `attribute_value` and `unquoted_attribute_value`; set `injection.include-children` when they need the original
+reference spellings as well. The highlight query captures those same content nodes, excluding quote delimiters.
+Legacy names without a semicolon remain literal before an ASCII letter, digit, or `=`; unknown names and incomplete
+numeric prefixes remain literal. Comments are document or element content and are not accepted between attributes.
+Comment-shaped text inside a quoted value remains part of that value. Whitespace after `=` separates the operator from
+the value, so `noval= bool` remains one attribute with the unquoted value `bool`.
 
 ## Usage
 
@@ -113,7 +118,7 @@ fuzzed with:
 ```toml
 [dependencies]
 tree-sitter = { package = "willbooster-tree-sitter", version = "15.0.0" }
-tree-sitter-html = { package = "willbooster-tree-sitter-html", version = "10" }
+tree-sitter-html = { package = "willbooster-tree-sitter-html", version = "11" }
 ```
 
 ```rust

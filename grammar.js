@@ -141,15 +141,16 @@ module.exports = grammar({
       optional(seq(
         '=',
         choice(
-          $.attribute_value,
-          $.quoted_attribute_value,
+          $.unquoted_attribute_value,
+          $.singlequoted_attribute_value,
+          $.doublequoted_attribute_value,
         ),
       )),
     ),
 
     attribute_name: _ => /[^<>"'/=\s]+/,
 
-    attribute_value: $ => seq(
+    unquoted_attribute_value: $ => seq(
       choice(
         alias($._unquoted_attribute_entity, $.entity),
         /[^<>"'=\s&]+/,
@@ -164,18 +165,17 @@ module.exports = grammar({
 
     entity: _ => token(/&(#([xX][0-9a-fA-F]+|[0-9]+)|[A-Za-z][A-Za-z0-9]*);?/),
 
-    quoted_attribute_value: $ => choice(
-      seq('\'', optional(alias(repeat1(choice(
-        alias($._attribute_entity, $.entity),
-        token.immediate(/[^'&]+/),
-        $._attribute_ampersand,
-      )), $.attribute_value)), '\''),
-      seq('"', optional(alias(repeat1(choice(
-        alias($._attribute_entity, $.entity),
-        token.immediate(/[^"&]+/),
-        $._attribute_ampersand,
-      )), $.attribute_value)), '"'),
-    ),
+    singlequoted_attribute_value: $ => seq('\'', optional(alias(repeat1(choice(
+      alias($._attribute_entity, $.entity),
+      token.immediate(/[^'&]+/),
+      $._attribute_ampersand,
+    )), $.attribute_value)), '\''),
+
+    doublequoted_attribute_value: $ => seq('"', optional(alias(repeat1(choice(
+      alias($._attribute_entity, $.entity),
+      token.immediate(/[^"&]+/),
+      $._attribute_ampersand,
+    )), $.attribute_value)), '"'),
 
     text: _ => token(prec(1, /[^<&]+/)),
   },

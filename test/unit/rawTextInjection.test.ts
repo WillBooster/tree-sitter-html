@@ -305,7 +305,9 @@ test('retains complete foreign raw-element content and distinguishes slashes in 
           expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
           expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([content]);
           if (attributes) {
-            expect(tree.rootNode.descendantsOfType('attribute_value').map((node) => node.text)).toEqual(['path/']);
+            expect(
+              tree.rootNode.descendantsOfType(['attribute_value', 'unquoted_attribute_value']).map((node) => node.text)
+            ).toEqual(['path/']);
           }
         } finally {
           tree.delete();
