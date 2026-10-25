@@ -7,7 +7,7 @@
 #endif
 
 #define TS_GENERATION_PROFILED 1
-#define LANGUAGE_VERSION 0x57420009
+#define LANGUAGE_VERSION 0x5742000b
 #define STATE_COUNT 117
 #define LARGE_STATE_COUNT 8
 #define LEX_STATE_COUNT 43
@@ -481,124 +481,8 @@ static const uint16_t ts_non_terminal_alias_map[] = {
   0,
 };
 
-static const TSStateId ts_primary_state_ids[STATE_COUNT] = {
-  [0] = 0,
-  [1] = 1,
-  [2] = 2,
-  [3] = 3,
-  [4] = 4,
-  [5] = 5,
-  [6] = 6,
-  [7] = 7,
-  [8] = 8,
-  [9] = 2,
-  [10] = 10,
-  [11] = 11,
-  [12] = 8,
-  [13] = 6,
-  [14] = 7,
-  [15] = 15,
-  [16] = 3,
-  [17] = 17,
-  [18] = 18,
-  [19] = 5,
-  [20] = 20,
-  [21] = 21,
-  [22] = 22,
-  [23] = 15,
-  [24] = 18,
-  [25] = 17,
-  [26] = 26,
-  [27] = 27,
-  [28] = 28,
-  [29] = 29,
-  [30] = 30,
-  [31] = 31,
-  [32] = 32,
-  [33] = 33,
-  [34] = 34,
-  [35] = 35,
-  [36] = 36,
-  [37] = 37,
-  [38] = 38,
-  [39] = 39,
-  [40] = 40,
-  [41] = 41,
-  [42] = 42,
-  [43] = 43,
-  [44] = 44,
-  [45] = 39,
-  [46] = 46,
-  [47] = 20,
-  [48] = 21,
-  [49] = 22,
-  [50] = 44,
-  [51] = 51,
-  [52] = 52,
-  [53] = 53,
-  [54] = 51,
-  [55] = 52,
-  [56] = 53,
-  [57] = 57,
-  [58] = 58,
-  [59] = 59,
-  [60] = 60,
-  [61] = 61,
-  [62] = 62,
-  [63] = 63,
-  [64] = 64,
-  [65] = 65,
-  [66] = 66,
-  [67] = 67,
-  [68] = 68,
-  [69] = 69,
-  [70] = 70,
-  [71] = 71,
-  [72] = 72,
-  [73] = 73,
-  [74] = 74,
-  [75] = 41,
-  [76] = 76,
-  [77] = 77,
-  [78] = 78,
-  [79] = 58,
-  [80] = 80,
-  [81] = 81,
-  [82] = 82,
-  [83] = 83,
-  [84] = 74,
-  [85] = 85,
-  [86] = 86,
-  [87] = 87,
-  [88] = 87,
-  [89] = 86,
-  [90] = 80,
-  [91] = 81,
-  [92] = 82,
-  [93] = 83,
-  [94] = 34,
-  [95] = 57,
-  [96] = 63,
-  [97] = 85,
-  [98] = 98,
-  [99] = 99,
-  [100] = 37,
-  [101] = 61,
-  [102] = 102,
-  [103] = 103,
-  [104] = 38,
-  [105] = 62,
-  [106] = 106,
-  [107] = 107,
-  [108] = 69,
-  [109] = 109,
-  [110] = 110,
-  [111] = 109,
-  [112] = 68,
-  [113] = 110,
-  [114] = 43,
-  [115] = 30,
-  [116] = 70,
+static const uint8_t ts_primary_state_bitmap[] = {
+  255, 141, 118, 252, 255, 95, 56, 254, 255, 119, 239, 0, 204, 108, 0, 
 };
 
 #define TS_LEX_REPEAT(skip_value, label)             \
@@ -610,86 +494,86 @@ static const TSStateId ts_primary_state_ids[STATE_COUNT] = {
   }
 
 static bool ts_lex(TSLexer *lexer, TSStateId state) {
-  UNUSED TSLexerPosition start_tags[1];
+  UNUSED TSLexerCheckpoint start_tags[1];
   START_LEXER();
   eof = lookahead == 0 && lexer->eof(lexer);
   switch (state) {
     case 0:
       ts_lex_state_0:
       if (eof) ADVANCE(18);
-      if (lookahead == '"') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(38); }
-      if (lookahead == '&') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(25); }
-      if (lookahead == '\'') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(35); }
-      if (lookahead == '/') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(9); }
-      if (lookahead == '<') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(24); }
-      if (lookahead == '=') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(28); }
-      if (lookahead == '>') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(20); }
+      if (lookahead == '"') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(38); }
+      if (lookahead == '&') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(25); }
+      if (lookahead == '\'') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(35); }
+      if (lookahead == '/') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(9); }
+      if (lookahead == '<') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(24); }
+      if (lookahead == '=') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(28); }
+      if (lookahead == '>') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(20); }
       if (lookahead == 'D' ||
-          lookahead == 'd') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(12); }
+          lookahead == 'd') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(12); }
       if (('\t' <= lookahead && lookahead <= '\r') ||
           lookahead == ' ') TS_LEX_REPEAT(true, ts_lex_state_0);
       END_STATE();
     case 1:
       if (eof) ADVANCE(18);
-      if (lookahead == '&') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(25); }
-      if (lookahead == '<') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(24); }
+      if (lookahead == '&') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(25); }
+      if (lookahead == '<') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(24); }
       if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(41); }
-      if (!eof) { lexer->get_position(lexer, &start_tags[0]); ADVANCE(42); }
+          lookahead == ' ') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(41); }
+      if (!eof) { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(42); }
       END_STATE();
     case 2:
       ts_lex_state_2:
-      if (lookahead == '/') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(9); }
-      if (lookahead == '=') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(28); }
-      if (lookahead == '>') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(20); }
+      if (lookahead == '/') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(9); }
+      if (lookahead == '=') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(28); }
+      if (lookahead == '>') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(20); }
       if (('\t' <= lookahead && lookahead <= '\r') ||
           lookahead == ' ') TS_LEX_REPEAT(true, ts_lex_state_2);
       if (!eof &&
           lookahead != '"' &&
           lookahead != '\'' &&
-          (lookahead < '<' || '>' < lookahead)) { lexer->get_position(lexer, &start_tags[0]); ADVANCE(29); }
+          (lookahead < '<' || '>' < lookahead)) { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(29); }
       END_STATE();
     case 3:
       ts_lex_state_3:
-      if (lookahead == '"') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(38); }
-      if (lookahead == '\'') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(35); }
+      if (lookahead == '"') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(38); }
+      if (lookahead == '\'') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(35); }
       if (('\t' <= lookahead && lookahead <= '\r') ||
           lookahead == ' ') TS_LEX_REPEAT(true, ts_lex_state_3);
       if (!eof &&
           lookahead != '&' &&
           lookahead != '\'' &&
-          (lookahead < '<' || '>' < lookahead)) { lexer->get_position(lexer, &start_tags[0]); ADVANCE(30); }
+          (lookahead < '<' || '>' < lookahead)) { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(30); }
       END_STATE();
     case 4:
-      if (lookahead == '"') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(38); }
+      if (lookahead == '"') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(38); }
       if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(39); }
+          lookahead == ' ') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(39); }
       if (!eof &&
-          lookahead != '&') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(40); }
+          lookahead != '&') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(40); }
       END_STATE();
     case 5:
-      if (lookahead == '>') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(20); }
+      if (lookahead == '>') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(20); }
       if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(22); }
-      if (!eof) { lexer->get_position(lexer, &start_tags[0]); ADVANCE(23); }
+          lookahead == ' ') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(22); }
+      if (!eof) { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(23); }
       END_STATE();
     case 6:
-      if (lookahead == '\'') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(35); }
+      if (lookahead == '\'') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(35); }
       if (('\t' <= lookahead && lookahead <= '\r') ||
-          lookahead == ' ') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(36); }
+          lookahead == ' ') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(36); }
       if (!eof &&
           lookahead != '&' &&
-          lookahead != '\'') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(37); }
+          lookahead != '\'') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(37); }
       END_STATE();
     case 7:
       ts_lex_state_7:
-      if (lookahead == '"') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(38); }
+      if (lookahead == '"') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(38); }
       if (('\t' <= lookahead && lookahead <= '\r') ||
           lookahead == ' ') TS_LEX_REPEAT(true, ts_lex_state_7);
       END_STATE();
     case 8:
       ts_lex_state_8:
-      if (lookahead == '\'') { lexer->get_position(lexer, &start_tags[0]); ADVANCE(35); }
+      if (lookahead == '\'') { lexer->get_checkpoint(lexer, &start_tags[0]); ADVANCE(35); }
       if (('\t' <= lookahead && lookahead <= '\r') ||
           lookahead == ' ') TS_LEX_REPEAT(true, ts_lex_state_8);
       END_STATE();
@@ -926,7 +810,7 @@ static const TSLexerMode ts_lex_modes[] = {
   [16] = {.lex_state = 0, .lex_state_after_extra = 0, .external_lex_state = 13, .external_lex_state_after_extra = 13, .reserved_word_set_id = 0},
 };
 
-static const uint16_t ts_lex_mode_ids[STATE_COUNT] = {
+static const uint8_t ts_lex_mode_ids[STATE_COUNT] = {
   0, 1, 2, 2, 2, 2, 3, 4, 2, 2, 1, 5, 1, 3, 4, 1, 
   1, 5, 6, 2, 4, 7, 2, 2, 6, 5, 4, 8, 9, 4, 10, 9, 
   4, 9, 1, 4, 11, 11, 7, 1, 12, 4, 2, 13, 5, 2, 4, 4, 
@@ -1939,7 +1823,7 @@ TS_PUBLIC const TSLanguage *tree_sitter_html(void) {
       tree_sitter_html_external_scanner_serialize,
       tree_sitter_html_external_scanner_deserialize,
     },
-    .primary_state_ids = ts_primary_state_ids,
+    .primary_state_bitmap = ts_primary_state_bitmap,
     .name = "html",
     .max_reserved_word_set_size = 0,
     .metadata = {
