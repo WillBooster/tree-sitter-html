@@ -34,6 +34,18 @@ static bool tag_attributes_html_encoding(const String *suffix) {
     return false;
 }
 
+static bool tag_attributes_html_font(const String *suffix) {
+    unsigned offset = 0;
+    while (offset < suffix->size) {
+        TagAttribute attribute = tag_attribute(suffix, &offset);
+        const char *name = suffix->contents + attribute.name;
+        unsigned length = attribute.name_end - attribute.name;
+        if (tag_attribute_name(name, length, "color") || tag_attribute_name(name, length, "face") ||
+            tag_attribute_name(name, length, "size")) return true;
+    }
+    return false;
+}
+
 static bool tag_attributes_self_closing(const String *suffix) {
     unsigned offset = 0;
     while (offset < suffix->size) {

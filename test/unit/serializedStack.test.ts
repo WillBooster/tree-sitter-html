@@ -50,14 +50,12 @@ for (const { name, open, close, compressible } of wrappers) {
         expect(result.error).toBeUndefined();
         expect(result.status).toBe(compressible ? 0 : 1);
         const compact = result.stdout.replaceAll(/<(\w+)\b[^>]*>/g, '<$1>').replaceAll(/\s+/g, '');
-        expect(compact).toContain(
-          `<element><start_tag>&lt;<tag_name>br</tag_name>&gt;</start_tag></element><text>${text}</text>`
-        );
+        expect(compact).toContain(`<void_element>&lt;<tag_name>br</tag_name>&gt;</void_element><text>${text}</text>`);
         expect(compact).toContain('<raw_text>content</raw_text>');
         expect(compact).toContain(
           '<tag_name>custom-a</tag_name>&gt;</end_tag></element><end_tag>&lt;/<tag_name>section</tag_name>'
         );
-        expect(compact).toContain('</start_tag></element><text>tail</text>');
+        expect(compact).toContain('</void_element><text>tail</text>');
       }
     } finally {
       fs.rmSync(directory, { recursive: true, force: true });
@@ -152,7 +150,7 @@ for (const { name, complete, depth = 1 } of [
 function checkActiveTags(tree: Tree, text: string, compressible: boolean): void {
   expect(tree.rootNode.hasError).toBe(!compressible);
   const names = tree.rootNode.descendantsOfType('tag_name');
-  const breaks = names.filter((node) => node.text === 'br').map((node) => node.parent?.parent);
+  const breaks = names.filter((node) => node.text === 'br').map((node) => node.parent);
   expect(breaks.map((node) => node?.text)).toEqual(['<br>', '<br>']);
   expect(breaks.map((node) => [node?.nextNamedSibling?.type, node?.nextNamedSibling?.text])).toEqual([
     ['text', text],
