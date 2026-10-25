@@ -631,6 +631,9 @@ static bool is_html_whitespace(int32_t character) {
     return character == ' ' || character == '\t' || character == '\n' || character == '\r' || character == '\f';
 }
 
+static bool scan_foreign_breakout(const Scanner *scanner, TSLexer *lexer, const Tag *tag, bool closing);
+static bool tag_starts_foreign_breakout(const Tag *tag, TSLexer *lexer);
+
 static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     Tag *parent = top_tag(scanner);
 
@@ -651,9 +654,7 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     }
 
     Tag next_tag = tag_for_name(tag_name);
-    bool void_breakout = next_tag.type == BR || next_tag.type == EMBED || next_tag.type == HR ||
-                         next_tag.type == IMG || next_tag.type == META;
-    if (!is_closing_tag && void_breakout && parent && active_namespace(scanner, true) != NAMESPACE_HTML) {
+    if (parent && scan_foreign_breakout(scanner, lexer, &next_tag, is_closing_tag)) {
         pop_tag(scanner);
         lexer->result_symbol = IMPLICIT_END_TAG;
         tag_free(&next_tag);
@@ -695,6 +696,33 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
 
     tag_free(&next_tag);
     return false;
+}
+
+static bool scan_foreign_breakout(const Scanner *scanner, TSLexer *lexer, const Tag *tag, bool closing) {
+    if (active_namespace(scanner, true) == NAMESPACE_HTML) return false;
+    return closing ? tag->type == BR || tag->type == P : tag_starts_foreign_breakout(tag, lexer);
+}
+
+static bool tag_starts_foreign_breakout(const Tag *tag, TSLexer *lexer) {
+    static const TagType types[] = {
+        B, BLOCKQUOTE, BODY, BR, CODE, DD, DIV, DL, DT, EM, EMBED,
+        H1, H2, H3, H4, H5, H6, HEAD, HR, I, IMG, LI, MENU, META,
+        OL, P, PRE, RUBY, S, SMALL, SPAN, STRONG, SUB, SUP, TABLE, U, UL, VAR,
+    };
+    for (unsigned i = 0; i < sizeof(types) / sizeof(types[0]); i++) {
+        if (tag->type == types[i]) return true;
+    }
+    if (tag->type != CUSTOM) return false;
+    static const char *names[] = {"BIG", "CENTER", "LISTING", "NOBR", "STRIKE", "TT"};
+    for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        if (tag->custom_tag_name.size == strlen(names[i]) &&
+            memcmp(tag->custom_tag_name.contents, names[i], tag->custom_tag_name.size) == 0) return true;
+    }
+    if (tag->custom_tag_name.size != 4 || memcmp(tag->custom_tag_name.contents, "FONT", 4) != 0) return false;
+    String suffix = array_new();
+    bool breakout = accepts_tag_suffix(lexer, false, &suffix) && tag_attributes_html_font(&suffix);
+    array_delete(&suffix);
+    return breakout;
 }
 
 static bool scan_start_tag_suffix(TSLexer *lexer, Tag *tag, bool *self_closing);

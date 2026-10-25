@@ -56,6 +56,8 @@ test('uses ordinary elements in foreign content and void elements after HTML int
     for (const [open, close] of [
       ['<svg><g>', '</g></svg>'],
       ['<math><annotation-xml>', '</annotation-xml></math>'],
+      ['<svg><font data-note="color=red face size">', '</font></svg>'],
+      ['<math><font colorful=red>', '</font></math>'],
     ]) {
       const source = `${open}<input>foreign</input>${close}<br><p>after</p>`;
       const tree = parser.parse(source)!;
@@ -223,6 +225,38 @@ test('recomputes foreign breakout boundaries after editing and undoing an openin
     }
   } finally {
     tree.delete();
+    parser.delete();
+  }
+});
+
+test('applies nonvoid and conditional font breakouts before following HTML void starts', () => {
+  const parser = new Parser().setLanguage(language);
+  try {
+    for (const [open, name] of [
+      ['<p>', 'p'],
+      ['<font color=red>', 'font'],
+      ['<font FACE="a > b">', 'font'],
+      ['<font size>', 'font'],
+    ]) {
+      const source = `<section><svg>${open}<input><span>x</span></${name}></svg><p>after</p></section>`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError, source).toBe(false);
+        const input = tree.rootNode.descendantsOfType('void_element').find((node) => node.text === '<input>')!;
+        expect(input?.nextNamedSibling?.text, source).toBe('<span>x</span>');
+        expect(input?.parent?.text, source).toBe(`${open}<input><span>x</span></${name}>`);
+        expect([input?.startIndex, input?.endIndex], source).toEqual([
+          source.indexOf('<input>'),
+          source.indexOf('<input>') + '<input>'.length,
+        ]);
+        const section = tree.rootNode.firstNamedChild!;
+        expect(section.namedChildren.some((node) => node.type === 'element' && node.text === '<svg>')).toBe(true);
+        expect(section.namedChildren.some((node) => node.text === '<p>after</p>')).toBe(true);
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
     parser.delete();
   }
 });
