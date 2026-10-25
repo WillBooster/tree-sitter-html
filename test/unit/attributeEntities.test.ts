@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 
 import { Edit, Language, Parser, Query } from '@willbooster/web-tree-sitter';
@@ -5,10 +6,14 @@ import { expect, test } from 'vitest';
 
 await Parser.init();
 const language = await Language.load(path.join(import.meta.dirname, '../../tree-sitter-html.wasm'));
+const valueContentTypes = ['attribute_value', 'unquoted_attribute_value'];
 
 test('exposes references inside complete quoted and unquoted attribute values', () => {
   const parser = new Parser().setLanguage(language);
-  const query = new Query(language, '(attribute_value (entity) @reference)');
+  const query = new Query(
+    language,
+    '[(attribute_value (entity) @reference) (unquoted_attribute_value (entity) @reference)]'
+  );
   try {
     for (const delimiter of ['"', "'", '']) {
       const value = '😀before&amp;&#128512;&#X000041;&CounterClockwiseContourIntegral;&amp;after';
@@ -16,7 +21,7 @@ test('exposes references inside complete quoted and unquoted attribute values', 
       const tree = parser.parse(source)!;
       try {
         expect(tree.rootNode.hasError, source).toBe(false);
-        const attribute = tree.rootNode.descendantsOfType('attribute_value');
+        const attribute = tree.rootNode.descendantsOfType(valueContentTypes);
         expect(attribute).toHaveLength(1);
         expect(attribute[0]!.text).toBe(value);
         const references = query.captures(tree.rootNode).map(({ node }) => node);
@@ -52,9 +57,9 @@ test('keeps ambiguous ampersands and incomplete references in the attribute valu
       const tree = parser.parse(source)!;
       try {
         expect(tree.rootNode.hasError, source).toBe(false);
-        expect(tree.rootNode.descendantsOfType('attribute_value').map((node) => node.text)).toEqual([value]);
+        expect(tree.rootNode.descendantsOfType(valueContentTypes).map((node) => node.text)).toEqual([value]);
         expect(tree.rootNode.descendantsOfType('entity')).toHaveLength(0);
-        expect(tree.rootNode.descendantsOfType('attribute_value')[0]!.children).toHaveLength(0);
+        expect(tree.rootNode.descendantsOfType(valueContentTypes)[0]!.children).toHaveLength(0);
         expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
       } finally {
         tree.delete();
@@ -72,12 +77,12 @@ test('keeps literal ampersands inside one unquoted value before the next attribu
     const tree = parser.parse(`<a title=${value} other="keep&amp;me"></a><p>after</p>`)!;
     try {
       expect(tree.rootNode.hasError).toBe(false);
-      expect(tree.rootNode.descendantsOfType('attribute_value').map((node) => node.text)).toEqual([
+      expect(tree.rootNode.descendantsOfType(valueContentTypes).map((node) => node.text)).toEqual([
         value,
         'keep&amp;me',
       ]);
       expect(tree.rootNode.descendantsOfType('entity').map((node) => node.text)).toEqual(['&amp;']);
-      expect(tree.rootNode.descendantsOfType('attribute_value')[0]!.children).toHaveLength(0);
+      expect(tree.rootNode.descendantsOfType(valueContentTypes)[0]!.children).toHaveLength(0);
       expect(tree.rootNode.descendantsOfType('attribute_name').map((node) => node.text)).toEqual(['title', 'other']);
       expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
     } finally {
@@ -95,7 +100,7 @@ test('preserves whitespace around references and consumes numeric references wit
     const tree = parser.parse(`<a title="${value}"></a>`)!;
     try {
       expect(tree.rootNode.hasError).toBe(false);
-      expect(tree.rootNode.descendantsOfType('attribute_value')[0]!.text).toBe(value);
+      expect(tree.rootNode.descendantsOfType(valueContentTypes)[0]!.text).toBe(value);
       expect(tree.rootNode.descendantsOfType('entity').map((node) => node.text)).toEqual([
         '&copy',
         '&#65',
@@ -117,7 +122,7 @@ test('keeps comment-shaped attribute content literal and comments outside tags i
     const tree = parser.parse(source)!;
     try {
       expect(tree.rootNode.hasError).toBe(false);
-      expect(tree.rootNode.descendantsOfType('attribute_value').map((node) => node.text)).toEqual([
+      expect(tree.rootNode.descendantsOfType(valueContentTypes).map((node) => node.text)).toEqual([
         '<!--literal-->&amp;',
       ]);
       expect(tree.rootNode.descendantsOfType('comment').map((node) => node.text)).toEqual([
@@ -152,7 +157,7 @@ test('keeps a contiguous slash in unquoted values and distinguishes separated se
       const tree = parser.parse(source)!;
       try {
         expect(tree.rootNode.hasError, source).toBe(false);
-        expect(tree.rootNode.descendantsOfType('attribute_value').map((node) => node.text)).toEqual([value]);
+        expect(tree.rootNode.descendantsOfType(valueContentTypes).map((node) => node.text)).toEqual([value]);
         expect(tree.rootNode.firstNamedChild?.text).toBe(`<a title=${value}>body</a>`);
         expect(tree.rootNode.descendantsOfType('self_closing_tag')).toHaveLength(0);
         expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
@@ -165,7 +170,7 @@ test('keeps a contiguous slash in unquoted values and distinguishes separated se
       try {
         expect(tree.rootNode.hasError, source).toBe(false);
         expect(tree.rootNode.descendantsOfType('self_closing_tag')).toHaveLength(1);
-        expect(tree.rootNode.descendantsOfType('attribute_value').map((node) => node.text)).toEqual(['foo&amp;']);
+        expect(tree.rootNode.descendantsOfType(valueContentTypes).map((node) => node.text)).toEqual(['foo&amp;']);
         expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
       } finally {
         tree.delete();
@@ -248,7 +253,7 @@ test('incrementally updates an attribute reference without changing neighboring 
       expect(incremental.rootNode.hasError).toBe(false);
       expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
       expect(incremental.rootNode.descendantsOfType('entity').map((node) => node.text)).toEqual(['&copy;', '&amp;']);
-      expect(incremental.rootNode.descendantsOfType('attribute_value').map((node) => node.text)).toEqual([
+      expect(incremental.rootNode.descendantsOfType(valueContentTypes).map((node) => node.text)).toEqual([
         'before &copy;=1 after',
         'keep&amp;me',
       ]);
@@ -272,7 +277,7 @@ test('exposes only references as children of values containing literal ampersand
       const tree = parser.parse(source)!;
       try {
         expect(tree.rootNode.hasError, source).toBe(false);
-        const attribute = tree.rootNode.descendantsOfType('attribute_value')[0]!;
+        const attribute = tree.rootNode.descendantsOfType(valueContentTypes)[0]!;
         expect(attribute.text, source).toBe(value);
         expect(
           attribute.children.map((node) => ({ type: node.type, named: node.isNamed, text: node.text })),
@@ -298,7 +303,7 @@ test('preserves non-ASCII whitespace before references in unquoted values', () =
         const tree = parser.parse(source)!;
         try {
           expect(tree.rootNode.hasError, source).toBe(false);
-          const attribute = tree.rootNode.descendantsOfType('attribute_value')[0]!;
+          const attribute = tree.rootNode.descendantsOfType(valueContentTypes)[0]!;
           expect(attribute.text, source).toBe(value);
           expect(source.slice(attribute.startIndex, attribute.endIndex), source).toBe(value);
           expect(
@@ -315,3 +320,145 @@ test('preserves non-ASCII whitespace before references in unquoted values', () =
     parser.delete();
   }
 });
+
+test('selects each outer attribute value once while preserving quote-free content captures', () => {
+  const parser = new Parser().setLanguage(language);
+  const outer = new Query(
+    language,
+    `[
+    (unquoted_attribute_value)
+    (singlequoted_attribute_value)
+    (doublequoted_attribute_value)
+  ] @value`
+  );
+  const content = new Query(language, '[(attribute_value) (unquoted_attribute_value)] @injection.content');
+  try {
+    const source = `<a bare=one&amp;two double="three&#65;four" single='five&amp;six' empty="" noval= bool></a>`;
+    const tree = parser.parse(source)!;
+    try {
+      expect(tree.rootNode.hasError).toBe(false);
+      expect(outer.captures(tree.rootNode).map(({ node }) => [node.type, node.text])).toEqual([
+        ['unquoted_attribute_value', 'one&amp;two'],
+        ['doublequoted_attribute_value', '"three&#65;four"'],
+        ['singlequoted_attribute_value', "'five&amp;six'"],
+        ['doublequoted_attribute_value', '""'],
+        ['unquoted_attribute_value', 'bool'],
+      ]);
+      expect(content.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([
+        'one&amp;two',
+        'three&#65;four',
+        'five&amp;six',
+        'bool',
+      ]);
+      const attributes = tree.rootNode.descendantsOfType('attribute');
+      expect(attributes).toHaveLength(5);
+      expect(attributes.at(-1)?.text).toBe('noval= bool');
+      expect(attributes.flatMap((node) => node.namedChildren.slice(1)).map((node) => node.type)).toEqual(
+        outer.captures(tree.rootNode).map(({ node }) => node.type)
+      );
+    } finally {
+      tree.delete();
+    }
+  } finally {
+    content.delete();
+    outer.delete();
+    parser.delete();
+  }
+});
+
+test('retains value, reference, and highlight ranges through quote changes and undo in HTML and foreign content', () => {
+  const parser = new Parser().setLanguage(language);
+  const outer = new Query(
+    language,
+    `[
+    (unquoted_attribute_value)
+    (singlequoted_attribute_value)
+    (doublequoted_attribute_value)
+  ] @value`
+  );
+  const contentQuery = new Query(language, '[(attribute_value) (unquoted_attribute_value)] @content');
+  const highlights = new Query(
+    language,
+    fs.readFileSync(path.join(import.meta.dirname, '../../queries/highlights.scm'), 'utf8')
+  );
+  try {
+    for (const [prefix, suffix] of [
+      ['<a title=', '>body</a><p>after</p>'],
+      ['<svg><g title=', '>foreign</g></svg><p>after</p>'],
+      ['<math><mtext><a title=', '>html</a></mtext></math><p>after</p>'],
+    ] as const) {
+      for (const { value, unquoted } of [
+        { value: '😀a&amp;&#65;z', unquoted: true },
+        { value: 'line\n&amp;tail', unquoted: false },
+        { value: 'nul\0&amp;tail', unquoted: true },
+        { value: '', unquoted: false },
+      ]) {
+        let serialized = `"${value}"`;
+        let source = prefix + serialized + suffix;
+        let tree = parser.parse(source)!;
+        try {
+          for (const next of [`'${value}'`, ...(unquoted ? [value] : []), `"${value}"`]) {
+            const startIndex = prefix.length;
+            tree.edit(
+              new Edit({
+                startIndex,
+                oldEndIndex: startIndex + serialized.length,
+                newEndIndex: startIndex + next.length,
+                startPosition: sourcePoint(source, startIndex),
+                oldEndPosition: sourcePoint(source, startIndex + serialized.length),
+                newEndPosition: sourcePoint(prefix + next, startIndex + next.length),
+              })
+            );
+            source = prefix + next + suffix;
+            const updated = parser.parse(source, tree)!;
+            tree.delete();
+            tree = updated;
+            const fresh = parser.parse(source)!;
+            try {
+              expect(tree.rootNode.hasError, source).toBe(false);
+              expect(tree.rootNode.toString()).toBe(fresh.rootNode.toString());
+              const outerValues = outer.captures(tree.rootNode).map(({ node }) => node);
+              expect(outerValues.map((node) => [node.text, node.startIndex, node.endIndex])).toEqual([
+                [next, prefix.length, prefix.length + next.length],
+              ]);
+              const quoteLength = next === value ? 0 : 1;
+              const expectedContent = value
+                ? [[value, prefix.length + quoteLength, prefix.length + quoteLength + value.length]]
+                : [];
+              expect(
+                contentQuery.captures(tree.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
+              ).toEqual(expectedContent);
+              expect(
+                highlights
+                  .captures(tree.rootNode)
+                  .filter(({ name }) => name === 'string')
+                  .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+              ).toEqual(expectedContent);
+              expect(
+                tree.rootNode.descendantsOfType('entity').map((node) => [node.text, node.startIndex, node.endIndex])
+              ).toEqual(
+                fresh.rootNode.descendantsOfType('entity').map((node) => [node.text, node.startIndex, node.endIndex])
+              );
+              expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+            } finally {
+              fresh.delete();
+            }
+            serialized = next;
+          }
+        } finally {
+          tree.delete();
+        }
+      }
+    }
+  } finally {
+    highlights.delete();
+    contentQuery.delete();
+    outer.delete();
+    parser.delete();
+  }
+});
+
+function sourcePoint(source: string, offset: number): { row: number; column: number } {
+  const lines = source.slice(0, offset).split('\n');
+  return { row: lines.length - 1, column: lines.at(-1)!.length };
+}

@@ -3,7 +3,10 @@
 (doctype) @constant
 (processing_instruction) @keyword.directive
 (attribute_name) @attribute
-(attribute_value) @string
+[
+  (attribute_value)
+  (unquoted_attribute_value)
+] @string
 (comment) @comment
 
 [

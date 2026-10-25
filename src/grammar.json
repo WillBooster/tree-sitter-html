@@ -502,11 +502,15 @@
                   "members": [
                     {
                       "type": "SYMBOL",
-                      "name": "attribute_value"
+                      "name": "unquoted_attribute_value"
                     },
                     {
                       "type": "SYMBOL",
-                      "name": "quoted_attribute_value"
+                      "name": "singlequoted_attribute_value"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "doublequoted_attribute_value"
                     }
                   ]
                 }
@@ -523,7 +527,7 @@
       "type": "PATTERN",
       "value": "[^<>\"'/=\\s]+"
     },
-    "attribute_value": {
+    "unquoted_attribute_value": {
       "type": "SEQ",
       "members": [
         {
@@ -582,116 +586,111 @@
         "value": "&(#([xX][0-9a-fA-F]+|[0-9]+)|[A-Za-z][A-Za-z0-9]*);?"
       }
     },
-    "quoted_attribute_value": {
-      "type": "CHOICE",
+    "singlequoted_attribute_value": {
+      "type": "SEQ",
       "members": [
         {
-          "type": "SEQ",
+          "type": "STRING",
+          "value": "'"
+        },
+        {
+          "type": "CHOICE",
           "members": [
             {
-              "type": "STRING",
-              "value": "'"
-            },
-            {
-              "type": "CHOICE",
-              "members": [
-                {
-                  "type": "ALIAS",
-                  "content": {
-                    "type": "REPEAT1",
-                    "content": {
-                      "type": "CHOICE",
-                      "members": [
-                        {
-                          "type": "ALIAS",
-                          "content": {
-                            "type": "SYMBOL",
-                            "name": "_attribute_entity"
-                          },
-                          "named": true,
-                          "value": "entity"
-                        },
-                        {
-                          "type": "IMMEDIATE_TOKEN",
-                          "content": {
-                            "type": "PATTERN",
-                            "value": "[^'&]+"
-                          }
-                        },
-                        {
-                          "type": "SYMBOL",
-                          "name": "_attribute_ampersand"
-                        }
-                      ]
+              "type": "ALIAS",
+              "content": {
+                "type": "REPEAT1",
+                "content": {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_attribute_entity"
+                      },
+                      "named": true,
+                      "value": "entity"
+                    },
+                    {
+                      "type": "IMMEDIATE_TOKEN",
+                      "content": {
+                        "type": "PATTERN",
+                        "value": "[^'&]+"
+                      }
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "_attribute_ampersand"
                     }
-                  },
-                  "named": true,
-                  "value": "attribute_value"
-                },
-                {
-                  "type": "BLANK"
+                  ]
                 }
-              ]
+              },
+              "named": true,
+              "value": "attribute_value"
             },
             {
-              "type": "STRING",
-              "value": "'"
+              "type": "BLANK"
             }
           ]
         },
         {
-          "type": "SEQ",
+          "type": "STRING",
+          "value": "'"
+        }
+      ]
+    },
+    "doublequoted_attribute_value": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "\""
+        },
+        {
+          "type": "CHOICE",
           "members": [
             {
-              "type": "STRING",
-              "value": "\""
-            },
-            {
-              "type": "CHOICE",
-              "members": [
-                {
-                  "type": "ALIAS",
-                  "content": {
-                    "type": "REPEAT1",
-                    "content": {
-                      "type": "CHOICE",
-                      "members": [
-                        {
-                          "type": "ALIAS",
-                          "content": {
-                            "type": "SYMBOL",
-                            "name": "_attribute_entity"
-                          },
-                          "named": true,
-                          "value": "entity"
-                        },
-                        {
-                          "type": "IMMEDIATE_TOKEN",
-                          "content": {
-                            "type": "PATTERN",
-                            "value": "[^\"&]+"
-                          }
-                        },
-                        {
-                          "type": "SYMBOL",
-                          "name": "_attribute_ampersand"
-                        }
-                      ]
+              "type": "ALIAS",
+              "content": {
+                "type": "REPEAT1",
+                "content": {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_attribute_entity"
+                      },
+                      "named": true,
+                      "value": "entity"
+                    },
+                    {
+                      "type": "IMMEDIATE_TOKEN",
+                      "content": {
+                        "type": "PATTERN",
+                        "value": "[^\"&]+"
+                      }
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "_attribute_ampersand"
                     }
-                  },
-                  "named": true,
-                  "value": "attribute_value"
-                },
-                {
-                  "type": "BLANK"
+                  ]
                 }
-              ]
+              },
+              "named": true,
+              "value": "attribute_value"
             },
             {
-              "type": "STRING",
-              "value": "\""
+              "type": "BLANK"
             }
           ]
+        },
+        {
+          "type": "STRING",
+          "value": "\""
         }
       ]
     },
