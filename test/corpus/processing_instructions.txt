@@ -18,11 +18,19 @@ Instructions close void elements
 
 (document
   (element
-    (start_tag (tag_name))
-    (element (start_tag (tag_name)))
+    (start_tag
+      (tag_name))
+    (void_element
+      (tag_name))
     (processing_instruction)
-    (element (start_tag (tag_name)) (text) (end_tag (tag_name)))
-    (end_tag (tag_name)))
+    (element
+      (start_tag
+        (tag_name))
+      (text)
+      (end_tag
+        (tag_name)))
+    (end_tag
+      (tag_name)))
   (text))
 
 ==================
@@ -34,7 +42,12 @@ Reserved targets become comments
 
 (document
   (comment)
-  (element (start_tag (tag_name)) (text) (end_tag (tag_name)))
+  (element
+    (start_tag
+      (tag_name))
+    (text)
+    (end_tag
+      (tag_name)))
   (text))
 
 ==================
@@ -46,12 +59,19 @@ Instruction-like RCDATA retains entities and closing tags
 
 (document
   (element
-    (start_tag (tag_name))
+    (start_tag
+      (tag_name))
     (text)
     (entity)
     (text)
-    (end_tag (tag_name)))
-  (element (start_tag (tag_name)) (text) (end_tag (tag_name)))
+    (end_tag
+      (tag_name)))
+  (element
+    (start_tag
+      (tag_name))
+    (text)
+    (end_tag
+      (tag_name)))
   (text))
 
 ==================
@@ -63,7 +83,9 @@ Instruction-like raw content retains entity spelling
 
 (document
   (element
-    (start_tag (tag_name))
+    (start_tag
+      (tag_name))
     (text)
-    (end_tag (tag_name)))
+    (end_tag
+      (tag_name)))
   (text))

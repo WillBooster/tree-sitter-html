@@ -24,6 +24,7 @@ enum TokenType {
     UNQUOTED_ATTRIBUTE_FRAGMENT,
     DISCARDED_START_TAG,
     MISSING_START_TAG_END,
+    VOID_START_TAG_NAME,
 };
 
 typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH, NAMESPACE_MATH_ANNOTATION } Namespace;
@@ -46,7 +47,6 @@ static Namespace namespace_after_tag(Namespace current, const Tag *tag);
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-static bool close_void_element(Scanner *scanner, TSLexer *lexer);
 static bool scan_contiguous_attribute_content(TSLexer *lexer, const bool *valid_symbols);
 static bool scan_unquoted_attribute_fragment(TSLexer *lexer);
 static bool is_unquoted_attribute_content(int32_t character);
@@ -330,7 +330,7 @@ static void append_utf8(String *text, uint32_t character) {
     }
 }
 
-static bool scan_comment(TSLexer *lexer, bool mark_end) {
+static bool scan_comment(TSLexer *lexer) {
     if (lexer->lookahead != '-') {
         return false;
     }
@@ -350,9 +350,7 @@ static bool scan_comment(TSLexer *lexer, bool mark_end) {
                 if (dashes >= 2) {
                     lexer->result_symbol = COMMENT;
                     advance(lexer);
-                    if (mark_end) {
-                        lexer->mark_end(lexer);
-                    }
+                    lexer->mark_end(lexer);
                     return true;
                 }
             default:
@@ -638,12 +636,6 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     if (lexer->lookahead == '/') {
         is_closing_tag = true;
         advance(lexer);
-    } else {
-        if (parent && tag_is_void(parent)) {
-            pop_tag(scanner);
-            lexer->result_symbol = IMPLICIT_END_TAG;
-            return true;
-        }
     }
 
     String tag_name = scan_tag_name(lexer);
@@ -711,20 +703,16 @@ static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
     }
 
     push_tags(scanner, tag, 1);
-    if (self_closing && !in_html_namespace(scanner)) {
+    bool html = in_html_namespace(scanner);
+    bool raw = !self_closing || html;
+    if (tag_is_void(&tag) && html) {
+        lexer->result_symbol = VOID_START_TAG_NAME;
+    } else if (raw && tag.type == SCRIPT) {
+        lexer->result_symbol = SCRIPT_START_TAG_NAME;
+    } else if (raw && tag.type == STYLE) {
+        lexer->result_symbol = STYLE_START_TAG_NAME;
+    } else {
         lexer->result_symbol = START_TAG_NAME;
-        return true;
-    }
-    switch (tag.type) {
-        case SCRIPT:
-            lexer->result_symbol = SCRIPT_START_TAG_NAME;
-            break;
-        case STYLE:
-            lexer->result_symbol = STYLE_START_TAG_NAME;
-            break;
-        default:
-            lexer->result_symbol = START_TAG_NAME;
-            break;
     }
     return true;
 }
@@ -734,6 +722,9 @@ static bool scan_start_tag_suffix(TSLexer *lexer, Tag *tag, bool *self_closing) 
     bool annotation = tag->type == ANNOTATION_XML;
     bool raw = tag->type == SCRIPT || tag->type == STYLE;
     bool accepted = accepts_tag_suffix(lexer, false, annotation || raw ? &suffix : NULL);
+    if (tag_is_void(tag) && lexer->lookahead == '<') {
+        accepted = false;
+    }
     *self_closing = raw && tag_attributes_self_closing(&suffix);
     if (accepted && annotation && tag_attributes_html_encoding(&suffix)) {
         tag->type = ANNOTATION_XML_HTML;
@@ -794,22 +785,22 @@ static bool scan_self_closing_tag_delimiter(Scanner *scanner, TSLexer *lexer) {
     return false;
 }
 
-static bool scan_comment_or_void_end(Scanner *scanner, TSLexer *lexer, bool close_void) {
-    advance(lexer);
-    if (!scan_comment(lexer, !close_void)) {
-        return false;
-    }
-    if (close_void) {
-        pop_tag(scanner);
-        lexer->result_symbol = IMPLICIT_END_TAG;
-    }
-    return true;
+static bool scan_tag_syntax(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols);
+static bool scan_markup_open(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols);
+
+static bool accepts_start_tag(const bool *valid_symbols) {
+    return valid_symbols[START_TAG_NAME] || valid_symbols[VOID_START_TAG_NAME];
 }
 
-static bool scan_tag_syntax(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols);
-static bool scan_markup_open(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols, bool close_void);
-
 static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
+    if (valid_symbols[IMPLICIT_END_TAG] && !valid_symbols[SELF_CLOSING_TAG_DELIMITER] &&
+        top_tag(scanner) && tag_is_void(top_tag(scanner)) && in_html_namespace(scanner)) {
+        lexer->mark_end(lexer);
+        pop_tag(scanner);
+        lexer->result_symbol = IMPLICIT_END_TAG;
+        return true;
+    }
+
     if (valid_symbols[IMPLICIT_END_TAG] && lexer->eof(lexer) &&
         top_tag(scanner) && top_tag(scanner)->type == SCRIPT) {
         pop_tag(scanner);
@@ -817,7 +808,7 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return true;
     }
 
-    bool in_content = !valid_symbols[START_TAG_NAME] && !valid_symbols[END_TAG_NAME];
+    bool in_content = !accepts_start_tag(valid_symbols) && !valid_symbols[END_TAG_NAME];
     if (valid_symbols[RAW_TEXT] && in_content) {
         return scan_raw_text(scanner, lexer);
     }
@@ -839,30 +830,25 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
 }
 
 static bool scan_tag_syntax(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
-    bool close_void = valid_symbols[IMPLICIT_END_TAG] && !valid_symbols[SELF_CLOSING_TAG_DELIMITER] &&
-                      scanner->tags.size > 0 && tag_is_void(top_tag(scanner));
-    bool valid_tag_name = valid_symbols[START_TAG_NAME] || valid_symbols[END_TAG_NAME] ||
+    bool valid_start_tag = accepts_start_tag(valid_symbols);
+    bool valid_tag_name = valid_start_tag || valid_symbols[END_TAG_NAME] ||
                           valid_symbols[ERRONEOUS_END_TAG_NAME];
     bool in_tag = valid_tag_name || valid_symbols[SELF_CLOSING_TAG_DELIMITER] ||
                   valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY];
     if (iswspace(lexer->lookahead) && !in_tag) {
-        return close_void && close_void_element(scanner, lexer);
+        return false;
     }
 
     while (is_attribute_whitespace(lexer->lookahead)) {
         skip(lexer);
     }
-    if (valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY] && !valid_symbols[START_TAG_NAME] && lexer->lookahead == '&') {
+    if (valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY] && !accepts_start_tag(valid_symbols) && lexer->lookahead == '&') {
         return scan_attribute_entity(lexer, UNQUOTED_ATTRIBUTE_ENTITY, ATTRIBUTE_AMPERSAND);
-    }
-
-    if (close_void && lexer->lookahead != '<') {
-        return close_void_element(scanner, lexer);
     }
 
     switch (lexer->lookahead) {
         case '<':
-            return scan_markup_open(scanner, lexer, valid_symbols, close_void);
+            return scan_markup_open(scanner, lexer, valid_symbols);
 
         case '\0':
             if (valid_symbols[IMPLICIT_END_TAG]) {
@@ -871,32 +857,27 @@ static bool scan_tag_syntax(Scanner *scanner, TSLexer *lexer, const bool *valid_
             break;
 
         case '/':
-            if (valid_symbols[SELF_CLOSING_TAG_DELIMITER] && !valid_symbols[START_TAG_NAME] &&
+            if (valid_symbols[SELF_CLOSING_TAG_DELIMITER] && !accepts_start_tag(valid_symbols) &&
                 !valid_symbols[END_TAG_NAME]) {
                 return scan_self_closing_tag_delimiter(scanner, lexer);
             }
             break;
 
         default:
-            if (valid_tag_name && !valid_symbols[RAW_TEXT]) {
-                return valid_symbols[START_TAG_NAME] ? scan_start_tag_name(scanner, lexer)
-                                                     : scan_end_tag_name(scanner, lexer, valid_symbols[END_TAG_NAME]);
-            }
+            if (!valid_tag_name || valid_symbols[RAW_TEXT]) return false;
+            return valid_start_tag ? scan_start_tag_name(scanner, lexer)
+                                   : scan_end_tag_name(scanner, lexer, valid_symbols[END_TAG_NAME]);
     }
 
     return false;
 }
 
-static bool scan_markup_open(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols, bool close_void) {
+static bool scan_markup_open(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     lexer->mark_end(lexer);
     advance(lexer);
     if (valid_symbols[COMMENT] && lexer->lookahead == '!') {
-        return scan_comment_or_void_end(scanner, lexer, close_void);
-    }
-    if (close_void && lexer->lookahead != '/') {
-        pop_tag(scanner);
-        lexer->result_symbol = IMPLICIT_END_TAG;
-        return true;
+        advance(lexer);
+        return scan_comment(lexer);
     }
     if (lexer->lookahead == '?') {
         return scan_processing_instruction(lexer, valid_symbols);
@@ -904,15 +885,8 @@ static bool scan_markup_open(Scanner *scanner, TSLexer *lexer, const bool *valid
     return valid_symbols[IMPLICIT_END_TAG] && scan_implicit_end_tag(scanner, lexer);
 }
 
-static bool close_void_element(Scanner *scanner, TSLexer *lexer) {
-    lexer->mark_end(lexer);
-    pop_tag(scanner);
-    lexer->result_symbol = IMPLICIT_END_TAG;
-    return true;
-}
-
 static bool scan_contiguous_attribute_content(TSLexer *lexer, const bool *valid_symbols) {
-    if (valid_symbols[START_TAG_NAME] || lexer->eof(lexer)) {
+    if (accepts_start_tag(valid_symbols) || lexer->eof(lexer)) {
         return false;
     }
     if (valid_symbols[UNQUOTED_ATTRIBUTE_FRAGMENT] && is_unquoted_attribute_content(lexer->lookahead)) {
