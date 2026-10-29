@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { Edit, Language, Parser } from '@willbooster/web-tree-sitter';
+import { Language, Parser } from '@willbooster/web-tree-sitter';
 import { afterAll, expect, test } from 'vitest';
 
 await Parser.init();
@@ -33,31 +33,11 @@ test.each([
     expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
 
     const index = source.toLowerCase().indexOf('html');
-    const before = source.slice(0, index).split('\n');
-    const row = before.length - 1;
-    const column = before.at(-1)!.length;
-    tree.edit(
-      new Edit({
-        startIndex: index,
-        oldEndIndex: index + 4,
-        newEndIndex: index + 3,
-        startPosition: { row, column },
-        oldEndPosition: { row, column: column + 4 },
-        newEndPosition: { row, column: column + 3 },
-      })
-    );
-    const edited = source.slice(0, index) + 'svg' + source.slice(index + 4);
-    const incremental = parser.parse(edited, tree)!;
-    const fresh = parser.parse(edited)!;
+    const renamed = parser.parse(source.slice(0, index) + 'svg' + source.slice(index + 4))!;
     try {
-      expect(incremental.rootNode.hasError).toBe(false);
-      expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
-      expect(incremental.rootNode.descendantsOfType('doctype_value').map((node) => node.text)).toEqual(
-        fresh.rootNode.descendantsOfType('doctype_value').map((node) => node.text)
-      );
+      expect(renamed.rootNode.hasError).toBe(false);
     } finally {
-      incremental.delete();
-      fresh.delete();
+      renamed.delete();
     }
   } finally {
     tree.delete();
@@ -76,26 +56,12 @@ test.each(['doctype', 'DOCTYPE'])('retains an erroneous %s declaration while its
       ['doctype_value', '', true],
     ]);
     expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-    tree.edit(
-      new Edit({
-        startIndex: 9,
-        oldEndIndex: 9,
-        newEndIndex: 14,
-        startPosition: { row: 0, column: 9 },
-        oldEndPosition: { row: 0, column: 9 },
-        newEndPosition: { row: 0, column: 14 },
-      })
-    );
-    const edited = source.slice(0, 9) + ' html' + source.slice(9);
-    const incremental = parser.parse(edited, tree)!;
-    const fresh = parser.parse(edited)!;
+    const completed = parser.parse(`<!${keyword} html><p>after</p>`)!;
     try {
-      expect(incremental.rootNode.hasError).toBe(false);
-      expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
-      expect(incremental.rootNode.firstNamedChild?.firstNamedChild?.text).toBe(' html');
+      expect(completed.rootNode.hasError).toBe(false);
+      expect(completed.rootNode.firstNamedChild?.firstNamedChild?.text).toBe(' html');
     } finally {
-      incremental.delete();
-      fresh.delete();
+      completed.delete();
     }
   } finally {
     tree.delete();

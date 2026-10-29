@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Edit, Language, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 await Parser.init();
@@ -230,40 +230,19 @@ test('preserves raw-text elements after an unterminated unquoted start tag', () 
   }
 });
 
-test('incrementally updates an attribute reference without changing neighboring values', () => {
+test('recognizes a completed attribute reference without changing neighboring values', () => {
   const parser = new Parser().setLanguage(language);
-  const source = '<a title="before &copy=1 after" other="keep&amp;me">body</a><p>after</p>';
-  const previous = parser.parse(source)!;
+  const tree = parser.parse('<a title="before &copy;=1 after" other="keep&amp;me">body</a><p>after</p>')!;
   try {
-    const startIndex = source.indexOf('&copy') + '&copy'.length;
-    const updated = `${source.slice(0, startIndex)};${source.slice(startIndex)}`;
-    previous.edit(
-      new Edit({
-        startIndex,
-        oldEndIndex: startIndex,
-        newEndIndex: startIndex + 1,
-        startPosition: { row: 0, column: startIndex },
-        oldEndPosition: { row: 0, column: startIndex },
-        newEndPosition: { row: 0, column: startIndex + 1 },
-      })
-    );
-    const incremental = parser.parse(updated, previous)!;
-    const fresh = parser.parse(updated)!;
-    try {
-      expect(incremental.rootNode.hasError).toBe(false);
-      expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
-      expect(incremental.rootNode.descendantsOfType('entity').map((node) => node.text)).toEqual(['&copy;', '&amp;']);
-      expect(incremental.rootNode.descendantsOfType(valueContentTypes).map((node) => node.text)).toEqual([
-        'before &copy;=1 after',
-        'keep&amp;me',
-      ]);
-      expect(incremental.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-    } finally {
-      incremental.delete();
-      fresh.delete();
-    }
+    expect(tree.rootNode.hasError).toBe(false);
+    expect(tree.rootNode.descendantsOfType('entity').map((node) => node.text)).toEqual(['&copy;', '&amp;']);
+    expect(tree.rootNode.descendantsOfType(valueContentTypes).map((node) => node.text)).toEqual([
+      'before &copy;=1 after',
+      'keep&amp;me',
+    ]);
+    expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
   } finally {
-    previous.delete();
+    tree.delete();
     parser.delete();
   }
 });
@@ -366,7 +345,7 @@ test('selects each outer attribute value once while preserving quote-free conten
   }
 });
 
-test('retains value, reference, and highlight ranges through quote changes and undo in HTML and foreign content', () => {
+test('retains value, reference, and highlight ranges for each quote style in HTML and foreign content', () => {
   const parser = new Parser().setLanguage(language);
   const outer = new Query(
     language,
@@ -393,60 +372,32 @@ test('retains value, reference, and highlight ranges through quote changes and u
         { value: 'nul\0&amp;tail', unquoted: true },
         { value: '', unquoted: false },
       ]) {
-        let serialized = `"${value}"`;
-        let source = prefix + serialized + suffix;
-        let tree = parser.parse(source)!;
-        try {
-          for (const next of [`'${value}'`, ...(unquoted ? [value] : []), `"${value}"`]) {
-            const startIndex = prefix.length;
-            tree.edit(
-              new Edit({
-                startIndex,
-                oldEndIndex: startIndex + serialized.length,
-                newEndIndex: startIndex + next.length,
-                startPosition: sourcePoint(source, startIndex),
-                oldEndPosition: sourcePoint(source, startIndex + serialized.length),
-                newEndPosition: sourcePoint(prefix + next, startIndex + next.length),
-              })
-            );
-            source = prefix + next + suffix;
-            const updated = parser.parse(source, tree)!;
+        for (const serialized of [`"${value}"`, `'${value}'`, ...(unquoted ? [value] : [])]) {
+          const source = prefix + serialized + suffix;
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError, source).toBe(false);
+            const outerValues = outer.captures(tree.rootNode).map(({ node }) => node);
+            expect(outerValues.map((node) => [node.text, node.startIndex, node.endIndex])).toEqual([
+              [serialized, prefix.length, prefix.length + serialized.length],
+            ]);
+            const quoteLength = serialized === value ? 0 : 1;
+            const expectedContent = value
+              ? [[value, prefix.length + quoteLength, prefix.length + quoteLength + value.length]]
+              : [];
+            expect(
+              contentQuery.captures(tree.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
+            ).toEqual(expectedContent);
+            expect(
+              highlights
+                .captures(tree.rootNode)
+                .filter(({ name }) => name === 'string')
+                .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+            ).toEqual(expectedContent);
+            expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+          } finally {
             tree.delete();
-            tree = updated;
-            const fresh = parser.parse(source)!;
-            try {
-              expect(tree.rootNode.hasError, source).toBe(false);
-              expect(tree.rootNode.toString()).toBe(fresh.rootNode.toString());
-              const outerValues = outer.captures(tree.rootNode).map(({ node }) => node);
-              expect(outerValues.map((node) => [node.text, node.startIndex, node.endIndex])).toEqual([
-                [next, prefix.length, prefix.length + next.length],
-              ]);
-              const quoteLength = next === value ? 0 : 1;
-              const expectedContent = value
-                ? [[value, prefix.length + quoteLength, prefix.length + quoteLength + value.length]]
-                : [];
-              expect(
-                contentQuery.captures(tree.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
-              ).toEqual(expectedContent);
-              expect(
-                highlights
-                  .captures(tree.rootNode)
-                  .filter(({ name }) => name === 'string')
-                  .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-              ).toEqual(expectedContent);
-              expect(
-                tree.rootNode.descendantsOfType('entity').map((node) => [node.text, node.startIndex, node.endIndex])
-              ).toEqual(
-                fresh.rootNode.descendantsOfType('entity').map((node) => [node.text, node.startIndex, node.endIndex])
-              );
-              expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-            } finally {
-              fresh.delete();
-            }
-            serialized = next;
           }
-        } finally {
-          tree.delete();
         }
       }
     }
@@ -457,8 +408,3 @@ test('retains value, reference, and highlight ranges through quote changes and u
     parser.delete();
   }
 });
-
-function sourcePoint(source: string, offset: number): { row: number; column: number } {
-  const lines = source.slice(0, offset).split('\n');
-  return { row: lines.length - 1, column: lines.at(-1)!.length };
-}

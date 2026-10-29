@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Edit, Language, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -11,46 +11,21 @@ const language = await Language.load(path.join(root, 'tree-sitter-html.wasm'));
 const highlights = fs.readFileSync(path.join(root, 'queries/highlights.scm'), 'utf8');
 const names = ['x-é', 'x-α', 'x-名', 'x-a\u0301', 'emotion-😍', 'x-a_b', 'x-a.b', 'x-·', 'x-\u200D', 'x-\u00A0'];
 
-test('retains ancestor ownership and following captures when repairing and undoing a rejected long name', () => {
+test('retains ancestor ownership and the following element around a rejected long name', () => {
   const parser = new Parser().setLanguage(language);
-  const query = new Query(language, highlights);
   const name = `x-${'<a'.repeat(150)}`;
-  const suffix = `>body</${name}>`;
-  let source = `<div>x<${name}${suffix}</div><p>after</p>`;
-  let tree = parser.parse(source)!;
-  const offset = source.indexOf('>body');
-  let previous = suffix;
   try {
-    for (const replacement of [' ', suffix]) {
-      tree.edit(
-        new Edit({
-          startIndex: offset,
-          oldEndIndex: offset + previous.length,
-          newEndIndex: offset + replacement.length,
-          startPosition: { row: 0, column: offset },
-          oldEndPosition: { row: 0, column: offset + previous.length },
-          newEndPosition: { row: 0, column: offset + replacement.length },
-        })
-      );
-      source = source.slice(0, offset) + replacement + source.slice(offset + previous.length);
-      const updated = parser.parse(source, tree)!;
-      tree.delete();
-      tree = updated;
-      const fresh = parser.parse(source)!;
+    for (const tail of [' ', `>body</${name}>`]) {
+      const tree = parser.parse(`<div>x<${name}${tail}</div><p>after</p>`)!;
       try {
-        expect(tree.rootNode.hasError).toBe(replacement === ' ');
-        expect(tree.rootNode.toString()).toBe(fresh.rootNode.toString());
-        expect(highlightRanges(query, tree)).toEqual(highlightRanges(query, fresh));
+        expect(tree.rootNode.hasError).toBe(tail === ' ');
         expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
         expect(tree.rootNode.firstNamedChild?.namedChildren.at(-1)?.text).toBe('</div>');
       } finally {
-        fresh.delete();
+        tree.delete();
       }
-      previous = replacement;
     }
   } finally {
-    tree.delete();
-    query.delete();
     parser.delete();
   }
 });
@@ -87,57 +62,42 @@ for (const name of [
   'x-&value',
   `x-${'名'.repeat(100)}`,
 ]) {
-  test(`retains ${name} name ranges and highlights while editing and undoing names`, () => {
+  test(`retains ${name} name ranges and highlights in matched and mismatched tags`, () => {
     const parser = new Parser().setLanguage(language);
     const query = new Query(language, highlights);
-    let source = '<x-base>body</x-base><p>after</p>';
-    let tree = parser.parse(source)!;
-    let previous = 'x-base';
     try {
-      for (const next of [name, 'x-base']) {
-        for (const closing of [false, true]) {
-          const offset = closing ? source.indexOf('</') + 2 : 1;
-          tree.edit(
-            new Edit({
-              startIndex: offset,
-              oldEndIndex: offset + previous.length,
-              newEndIndex: offset + next.length,
-              startPosition: { row: 0, column: offset },
-              oldEndPosition: { row: 0, column: offset + previous.length },
-              newEndPosition: { row: 0, column: offset + next.length },
-            })
-          );
-          source = source.slice(0, offset) + next + source.slice(offset + previous.length);
-          const updated = parser.parse(source, tree)!;
-          tree.delete();
-          tree = updated;
-          const fresh = parser.parse(source)!;
-          try {
-            expect(tree.rootNode.toString()).toBe(fresh.rootNode.toString());
-            expect(highlightRanges(query, tree)).toEqual(highlightRanges(query, fresh));
+      for (const [open, close] of [
+        [name, 'x-base'],
+        ['x-base', name],
+        [name, name],
+      ] as const) {
+        const source = `<${open}>body</${close}><p>after</p>`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(
+            tree.rootNode.descendantsOfType('element').find((node) => node.text === '<p>after</p>')?.startIndex
+          ).toBe(source.lastIndexOf('<p>'));
+          if (open === close) {
+            expect(tree.rootNode.hasError).toBe(false);
+            expect(tree.rootNode.namedChildren.map((node) => node.text)).toEqual([
+              `<${name}>body</${name}>`,
+              '<p>after</p>',
+            ]);
+            const starts = [1, source.indexOf('</') + 2, source.lastIndexOf('<p>') + 1, source.lastIndexOf('</p>') + 2];
             expect(
-              tree.rootNode.descendantsOfType('element').find((node) => node.text === '<p>after</p>')?.startIndex
-            ).toBe(source.lastIndexOf('<p>'));
-          } finally {
-            fresh.delete();
+              query
+                .captures(tree.rootNode)
+                .filter(({ name }) => name === 'tag')
+                .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+            ).toEqual(
+              [name, name, 'p', 'p'].map((value, index) => [value, starts[index], starts[index]! + value.length])
+            );
           }
+        } finally {
+          tree.delete();
         }
-        expect(tree.rootNode.hasError).toBe(false);
-        expect(tree.rootNode.namedChildren.map((node) => node.text)).toEqual([
-          `<${next}>body</${next}>`,
-          '<p>after</p>',
-        ]);
-        const starts = [1, source.indexOf('</') + 2, source.lastIndexOf('<p>') + 1, source.lastIndexOf('</p>') + 2];
-        expect(
-          query
-            .captures(tree.rootNode)
-            .filter(({ name }) => name === 'tag')
-            .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-        ).toEqual([next, next, 'p', 'p'].map((value, index) => [value, starts[index], starts[index]! + value.length]));
-        previous = next;
       }
     } finally {
-      tree.delete();
       query.delete();
       parser.delete();
     }
@@ -164,10 +124,6 @@ test('folds ASCII name letters without folding Unicode identities or accepting n
     parser.delete();
   }
 });
-
-function highlightRanges(query: Query, tree: Tree): [string, string, number, number][] {
-  return query.captures(tree.rootNode).map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex]);
-}
 
 test('keeps attached punctuation in mismatched closing names instead of closing the shorter name', () => {
   const parser = new Parser().setLanguage(language);

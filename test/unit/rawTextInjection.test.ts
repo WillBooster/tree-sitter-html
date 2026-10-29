@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Edit, Language, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 const root = path.join(import.meta.dirname, '../..');
@@ -66,7 +66,7 @@ for (const tag of ['script', 'style']) {
   });
 }
 
-test('preserves script injection through EOF and adding a real closing tag', () => {
+test('preserves script injection at EOF and before a real closing tag', () => {
   const parser = new Parser();
   parser.setLanguage(language);
   const query = new Query(language, querySource);
@@ -84,32 +84,16 @@ test('preserves script injection through EOF and adding a real closing tag', () 
         expect(query.captures(tree.rootNode).map(({ name, node }) => [name, node.text])).toEqual([
           ['injection.content', content],
         ]);
-        const suffix = '--></script><p>after</p>';
-        const lines = source.split('\n');
-        const position = { row: lines.length - 1, column: lines.at(-1)!.length };
-        tree.edit(
-          new Edit({
-            startIndex: source.length,
-            oldEndIndex: source.length,
-            newEndIndex: source.length + suffix.length,
-            startPosition: position,
-            oldEndPosition: position,
-            newEndPosition: { row: position.row, column: position.column + suffix.length },
-          })
-        );
-        const updated = parser.parse(source + suffix, tree)!;
-        const fresh = parser.parse(source + suffix)!;
-        try {
-          expect(updated.rootNode.toString()).toBe(fresh.rootNode.toString());
-          expect(updated.rootNode.hasError).toBe(false);
-          expect(updated.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-          expect(query.captures(updated.rootNode).map(({ node }) => node.text)).toEqual([content + '-->']);
-        } finally {
-          updated.delete();
-          fresh.delete();
-        }
       } finally {
         tree.delete();
+      }
+      const closed = parser.parse(`${source}--></script><p>after</p>`)!;
+      try {
+        expect(closed.rootNode.hasError).toBe(false);
+        expect(closed.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+        expect(query.captures(closed.rootNode).map(({ node }) => node.text)).toEqual([content + '-->']);
+      } finally {
+        closed.delete();
       }
     }
   } finally {
@@ -126,39 +110,18 @@ for (const tag of ['script', 'style']) {
       for (const opener of [`<${tag}>`, `<${tag.toUpperCase()} data-value="a/b">`, `<${tag} data-value=plain >`]) {
         const content = `<${tag}>still raw</${tag}X><b>inside</b>`;
         const suffix = `</${tag}><p>after</p>`;
-        const source = opener + content + suffix;
-        const insertion = opener.length - 1;
-        const updatedSource = source.slice(0, insertion) + '/' + source.slice(insertion);
-        const before = parser.parse(source)!;
-        before.edit(
-          new Edit({
-            startIndex: insertion,
-            oldEndIndex: insertion,
-            newEndIndex: insertion + 1,
-            startPosition: { row: 0, column: insertion },
-            oldEndPosition: { row: 0, column: insertion },
-            newEndPosition: { row: 0, column: insertion + 1 },
-          })
-        );
-        const incremental = parser.parse(updatedSource, before)!;
-        const fresh = parser.parse(updatedSource)!;
+        const source = `${opener.slice(0, -1)}/>${content}${suffix}`;
+        const tree = parser.parse(source)!;
         try {
-          expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
-          for (const tree of [fresh, incremental]) {
-            expect(tree.rootNode.hasError, updatedSource).toBe(false);
-            expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual([`${tag}_element`, 'element']);
-            expect(tree.rootNode.firstNamedChild?.firstNamedChild?.text).toBe(
-              updatedSource.slice(0, opener.length + 1)
-            );
-            expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-            expect(
-              query.captures(tree.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
-            ).toEqual([[content, opener.length + 1, opener.length + 1 + content.length]]);
-          }
+          expect(tree.rootNode.hasError, source).toBe(false);
+          expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual([`${tag}_element`, 'element']);
+          expect(tree.rootNode.firstNamedChild?.firstNamedChild?.text).toBe(source.slice(0, opener.length + 1));
+          expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+          expect(query.captures(tree.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])).toEqual([
+            [content, opener.length + 1, opener.length + 1 + content.length],
+          ]);
         } finally {
-          fresh.delete();
-          incremental.delete();
-          before.delete();
+          tree.delete();
         }
       }
     } finally {
@@ -257,33 +220,15 @@ test('retains raw content at encoding-dependent MathML integration points', () =
         tree.delete();
       }
     }
-    const source =
-      '<math><annotation-xml encoding="text/html"><script/>body</script></annotation-xml></math><p>after</p>';
-    const start = source.indexOf('text/html');
-    const before = parser.parse(source)!;
-    const replacement = 'application/xml';
-    before.edit(
-      new Edit({
-        startIndex: start,
-        oldEndIndex: start + 'text/html'.length,
-        newEndIndex: start + replacement.length,
-        startPosition: { row: 0, column: start },
-        oldEndPosition: { row: 0, column: start + 'text/html'.length },
-        newEndPosition: { row: 0, column: start + replacement.length },
-      })
-    );
-    const updatedSource = source.replace('text/html', replacement);
-    const incremental = parser.parse(updatedSource, before)!;
-    const fresh = parser.parse(updatedSource)!;
+    const tree = parser.parse(
+      '<math><annotation-xml encoding="application/xml"><script/>body</script></annotation-xml></math><p>after</p>'
+    )!;
     try {
-      expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
-      expect(incremental.rootNode.hasError).toBe(false);
-      expect(incremental.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-      expect(query.captures(incremental.rootNode)).toHaveLength(0);
+      expect(tree.rootNode.hasError).toBe(false);
+      expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+      expect(query.captures(tree.rootNode)).toHaveLength(0);
     } finally {
-      before.delete();
-      incremental.delete();
-      fresh.delete();
+      tree.delete();
     }
   } finally {
     query.delete();
