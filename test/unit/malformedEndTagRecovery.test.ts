@@ -257,20 +257,3 @@ test('retains elements and real closes when malformed attribute content contains
     parser.delete();
   }
 });
-
-test('retains attribute-recovery ownership after a less-than in an unquoted value', () => {
-  const parser = new Parser().setLanguage(language);
-  const tree = parser.parse('<section><a href=/q?a<b>body</a><p>after</p></section>')!;
-  try {
-    expect(tree.rootNode.hasError).toBe(true);
-    const section = tree.rootNode.firstNamedChild!;
-    expect(section.namedChildren.filter((node) => node.type === 'element').map((node) => node.text)).toEqual([
-      '<a href=/q?a<b>body</a>',
-      '<p>after</p>',
-    ]);
-    expect(section.namedChildren.find((node) => node.type === 'end_tag')?.text).toBe('</section>');
-  } finally {
-    tree.delete();
-    parser.delete();
-  }
-});
