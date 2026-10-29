@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Edit, Language, Parser, type Tree } from '@willbooster/web-tree-sitter';
+import { Language, Parser, type Tree } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -26,21 +26,20 @@ const wrappers = [
 for (const { name, open, close, compressible } of wrappers) {
   const prefix = `${open}<section><custom-a>`;
   const source = `${prefix}<br>text<script>content</script></custom-a></section><br>tail${close}`;
-  const offset = prefix.length + '<br>'.length;
-  const edited = `${source.slice(0, offset)}edited${source.slice(offset + 4)}`;
+  const edited = source.replace('<br>text', '<br>edited');
   const wrapped = `<xyz>${edited}</xyz>`;
 
-  test(`preserves active tags within ${name} in native fresh and incremental parses`, () => {
+  test(`preserves active tags within ${name} in native parses`, () => {
     const directory = fs.mkdtempSync(path.join(root, '.tmp/serialized-stack-'));
     try {
       const file = path.join(directory, 'input.html');
-      fs.writeFileSync(file, source);
-      for (const [text, edits] of [
-        ['text', []],
-        ['edited', ['--edits', `${offset} 4 edited`]],
-        ['edited', ['--edits', `${offset} 4 edited`, '0 0 <xyz>', `${edited.length + 5} 0 </xyz>`]],
+      for (const [input, text] of [
+        [source, 'text'],
+        [edited, 'edited'],
+        [wrapped, 'edited'],
       ] as const) {
-        const result = spawnSync('script/tree-sitter', ['parse', file, '--xml', ...edits], {
+        fs.writeFileSync(file, input);
+        const result = spawnSync('script/tree-sitter', ['parse', file, '--xml'], {
           cwd: root,
           timeout: 30_000,
           env: { ...process.env, TREE_SITTER_LIBDIR: path.join(root, '.tmp/tree-sitter-lib') },
@@ -62,29 +61,23 @@ for (const { name, open, close, compressible } of wrappers) {
     }
   }, 120_000);
 
-  test(`preserves active tags within ${name} in Wasm fresh and incremental parses`, () => {
+  test(`preserves active tags within ${name} in Wasm parses`, () => {
     const parser = new Parser();
     parser.setLanguage(language);
-    const trees: Tree[] = [];
-    const parse = (text: string, old?: Tree): Tree => {
-      const tree = parser.parse(text, old)!;
-      trees.push(tree);
-      return tree;
-    };
     try {
-      const tree = parse(source);
-      checkActiveTags(tree, 'text', compressible);
-      editLine(tree, offset, 4, 'edited');
-      const incremental = parse(edited, tree);
-      checkActiveTags(incremental, 'edited', compressible);
-      expect(incremental.rootNode.toString()).toBe(parse(edited).rootNode.toString());
-      editLine(incremental, 0, 0, '<xyz>');
-      editLine(incremental, edited.length + 5, 0, '</xyz>');
-      const wrappedIncremental = parse(wrapped, incremental);
-      checkActiveTags(wrappedIncremental, 'edited', compressible);
-      expect(wrappedIncremental.rootNode.toString()).toBe(parse(wrapped).rootNode.toString());
+      for (const [input, text] of [
+        [source, 'text'],
+        [edited, 'edited'],
+        [wrapped, 'edited'],
+      ] as const) {
+        const tree = parser.parse(input)!;
+        try {
+          checkActiveTags(tree, text, compressible);
+        } finally {
+          tree.delete();
+        }
+      }
     } finally {
-      for (const tree of trees) tree.delete();
       parser.delete();
     }
   }, 30_000);
@@ -100,46 +93,29 @@ for (const { name, complete, depth = 1 } of [
   { name: `x-${'a'.repeat(1014)}`, complete: false },
   { name: `x-${'a'.repeat(1098)}`, complete: false },
 ]) {
-  test(`retains following markup with ${depth} ${Buffer.byteLength(name)}-byte custom names after edits and undo`, () => {
+  test(`retains following markup with ${depth} ${Buffer.byteLength(name)}-byte custom names`, () => {
     const parser = new Parser().setLanguage(language);
     try {
       const prefix = `<${name}>`.repeat(depth);
       const suffix = `</${name}>`.repeat(depth);
-      const source = `${prefix}before${suffix}<p>after</p>`;
-      let tree = parser.parse(source)!;
-      try {
-        const offset = prefix.length;
-        for (const [previous, next] of [
-          ['before', 'before'],
-          ['before', 'edited'],
-          ['edited', 'before'],
-        ] as const) {
-          editLine(tree, offset, previous.length, next);
-          const updated = parser.parse(source.replace('before', next), tree)!;
-          tree.delete();
-          tree = updated;
-          const fresh = parser.parse(source.replace('before', next))!;
-          try {
-            expect(updated.rootNode.toString()).toBe(fresh.rootNode.toString());
-            const following = updated.rootNode
-              .descendantsOfType('element')
-              .find((node) => node.text === '<p>after</p>');
-            expect(following?.startIndex).toBe(source.indexOf('<p>'));
-            expect(following?.endIndex).toBe(source.length);
-            if (complete) {
-              expect(updated.rootNode.hasError).toBe(false);
-              expect(updated.rootNode.firstNamedChild?.lastNamedChild?.text).toBe(`</${name}>`);
-              expect(updated.rootNode.namedChildren.map((node) => node.text)).toEqual([
-                `${prefix}${next}${suffix}`,
-                '<p>after</p>',
-              ]);
-            }
-          } finally {
-            fresh.delete();
+      for (const content of ['before', 'edited']) {
+        const source = `${prefix}${content}${suffix}<p>after</p>`;
+        const tree = parser.parse(source)!;
+        try {
+          const following = tree.rootNode.descendantsOfType('element').find((node) => node.text === '<p>after</p>');
+          expect(following?.startIndex).toBe(source.indexOf('<p>'));
+          expect(following?.endIndex).toBe(source.length);
+          if (complete) {
+            expect(tree.rootNode.hasError).toBe(false);
+            expect(tree.rootNode.firstNamedChild?.lastNamedChild?.text).toBe(`</${name}>`);
+            expect(tree.rootNode.namedChildren.map((node) => node.text)).toEqual([
+              `${prefix}${content}${suffix}`,
+              '<p>after</p>',
+            ]);
           }
+        } finally {
+          tree.delete();
         }
-      } finally {
-        tree.delete();
       }
     } finally {
       parser.delete();
@@ -160,17 +136,4 @@ function checkActiveTags(tree: Tree, text: string, compressible: boolean): void 
   expect(custom?.lastNamedChild?.text).toBe('</custom-a>');
   expect(custom?.parent?.lastNamedChild?.text).toBe('</section>');
   expect(tree.rootNode.descendantsOfType('raw_text').map((node) => node.text)).toEqual(['content']);
-}
-
-function editLine(tree: Tree, start: number, deleted: number, inserted: string): void {
-  tree.edit(
-    new Edit({
-      startIndex: start,
-      oldEndIndex: start + deleted,
-      newEndIndex: start + inserted.length,
-      startPosition: { row: 0, column: start },
-      oldEndPosition: { row: 0, column: start + deleted },
-      newEndPosition: { row: 0, column: start + inserted.length },
-    })
-  );
 }

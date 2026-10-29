@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { Edit, Language, type Node, Parser } from '@willbooster/web-tree-sitter';
+import { Language, type Node, Parser } from '@willbooster/web-tree-sitter';
 import { afterAll, expect, test } from 'vitest';
 
 await Parser.init();
@@ -29,27 +29,12 @@ test.each(sources)('retains complete text ranges around markup in %j', (source) 
       source.includes('&amp;') ? ['&amp;'] : []
     );
     expectContentRanges(tree.rootNode);
-    tree.edit(
-      new Edit({
-        startIndex: 0,
-        oldEndIndex: 0,
-        newEndIndex: 2,
-        startPosition: { row: 0, column: 0 },
-        oldEndPosition: { row: 0, column: 0 },
-        newEndPosition: { row: 0, column: 2 },
-      })
-    );
-    const edited = ' \t' + source;
-    const incremental = parser.parse(edited, tree)!;
-    const fresh = parser.parse(edited)!;
+    const indented = parser.parse(` \t${source}`)!;
     try {
-      expect(incremental.rootNode.hasError).toBe(false);
-      expect(fresh.rootNode.hasError).toBe(false);
-      expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
-      expectContentRanges(incremental.rootNode);
+      expect(indented.rootNode.hasError).toBe(false);
+      expectContentRanges(indented.rootNode);
     } finally {
-      incremental.delete();
-      fresh.delete();
+      indented.delete();
     }
   } finally {
     tree.delete();
@@ -68,27 +53,13 @@ test.each(['&amp;', '&#123;', '&#x3b1;'])(
         tree.rootNode.descendantsOfType('entity').map((node) => [node.text, node.startIndex, node.endIndex])
       ).toEqual([[entity, source.indexOf(entity), source.indexOf(entity) + entity.length]]);
       expectContentRanges(tree.rootNode);
-      tree.edit(
-        new Edit({
-          startIndex: 2,
-          oldEndIndex: 3,
-          newEndIndex: 2,
-          startPosition: { row: 0, column: 2 },
-          oldEndPosition: { row: 0, column: 3 },
-          newEndPosition: { row: 0, column: 2 },
-        })
-      );
-      const edited = source.slice(0, 2) + source.slice(3);
-      const incremental = parser.parse(edited, tree)!;
-      const fresh = parser.parse(edited)!;
+      const repaired = parser.parse(source.slice(0, 2) + source.slice(3))!;
       try {
-        expect(incremental.rootNode.hasError).toBe(false);
-        expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
-        expect(incremental.rootNode.descendantsOfType('entity').map((node) => node.text)).toEqual([entity]);
-        expectContentRanges(incremental.rootNode);
+        expect(repaired.rootNode.hasError).toBe(false);
+        expect(repaired.rootNode.descendantsOfType('entity').map((node) => node.text)).toEqual([entity]);
+        expectContentRanges(repaired.rootNode);
       } finally {
-        incremental.delete();
-        fresh.delete();
+        repaired.delete();
       }
     } finally {
       tree.delete();

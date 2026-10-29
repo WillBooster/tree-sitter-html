@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Edit, Language, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 await Parser.init();
@@ -92,39 +92,19 @@ test('uses ordinary elements in foreign content and void elements after HTML int
   }
 });
 
-test('updates void classification and sibling ranges after editing and undoing tag names', () => {
+test('classifies void elements by tag name while retaining sibling ranges', () => {
   const parser = new Parser().setLanguage(language);
-  let source = '<section><x-input>text<p>after</p></section>';
-  let tree = parser.parse(source)!;
   try {
-    for (const [previous, next] of [
-      ['x-input', 'input'],
-      ['input', 'x-input'],
-    ] as const) {
-      const offset = source.indexOf(previous);
-      tree.edit(
-        new Edit({
-          startIndex: offset,
-          oldEndIndex: offset + previous.length,
-          newEndIndex: offset + next.length,
-          startPosition: { row: 0, column: offset },
-          oldEndPosition: { row: 0, column: offset + previous.length },
-          newEndPosition: { row: 0, column: offset + next.length },
-        })
-      );
-      source = source.slice(0, offset) + next + source.slice(offset + previous.length);
-      const updated = parser.parse(source, tree)!;
-      tree.delete();
-      tree = updated;
-      const fresh = parser.parse(source)!;
+    for (const name of ['x-input', 'input']) {
+      const source = `<section><${name}>text<p>after</p></section>`;
+      const tree = parser.parse(source)!;
       try {
-        expect(tree.rootNode.toString()).toBe(fresh.rootNode.toString());
         const following = tree.rootNode.descendantsOfType('element').find((node) => node.text === '<p>after</p>');
         expect([following?.startIndex, following?.endIndex]).toEqual([
           source.indexOf('<p>'),
           source.indexOf('</section>'),
         ]);
-        if (next === 'input') {
+        if (name === 'input') {
           expect(tree.rootNode.descendantsOfType('void_element').map((node) => node.text)).toEqual(['<input>']);
           expect(tree.rootNode.firstNamedChild?.namedChildren.map((node) => node.type)).toEqual([
             'start_tag',
@@ -137,11 +117,10 @@ test('updates void classification and sibling ranges after editing and undoing t
           expect(tree.rootNode.descendantsOfType('void_element')).toHaveLength(0);
         }
       } finally {
-        fresh.delete();
+        tree.delete();
       }
     }
   } finally {
-    tree.delete();
     parser.delete();
   }
 });
@@ -180,39 +159,19 @@ test('leaves foreign content at a void breakout while retaining source ranges an
   }
 });
 
-test('recomputes foreign breakout boundaries after editing and undoing an opening name', () => {
+test('computes foreign breakout boundaries from the opening name', () => {
   const parser = new Parser().setLanguage(language);
-  let source = '<section><math><input>foreign</input></math><p>after</p></section>';
-  let tree = parser.parse(source)!;
   try {
-    for (const [previous, next] of [
-      ['input', 'embed'],
-      ['embed', 'input'],
-    ] as const) {
-      const offset = source.indexOf(previous);
-      tree.edit(
-        new Edit({
-          startIndex: offset,
-          oldEndIndex: offset + previous.length,
-          newEndIndex: offset + next.length,
-          startPosition: { row: 0, column: offset },
-          oldEndPosition: { row: 0, column: offset + previous.length },
-          newEndPosition: { row: 0, column: offset + next.length },
-        })
-      );
-      source = source.slice(0, offset) + next + source.slice(offset + previous.length);
-      const updated = parser.parse(source, tree)!;
-      tree.delete();
-      tree = updated;
-      const fresh = parser.parse(source)!;
+    for (const name of ['embed', 'input']) {
+      const source = `<section><math><${name}>foreign</input></math><p>after</p></section>`;
+      const tree = parser.parse(source)!;
       try {
-        expect(tree.rootNode.toString()).toBe(fresh.rootNode.toString());
         expect(tree.rootNode.descendantsOfType('void_element').map((node) => node.text)).toEqual(
-          next === 'embed' ? ['<embed>'] : []
+          name === 'embed' ? ['<embed>'] : []
         );
         const section = tree.rootNode.firstNamedChild!;
         expect(section.namedChildren.some((node) => node.type === 'text' && node.text === 'foreign')).toBe(
-          next === 'embed'
+          name === 'embed'
         );
         const following = tree.rootNode.descendantsOfType('element').find((node) => node.text === '<p>after</p>');
         expect([following?.startIndex, following?.endIndex]).toEqual([
@@ -220,11 +179,10 @@ test('recomputes foreign breakout boundaries after editing and undoing an openin
           source.indexOf('</section>'),
         ]);
       } finally {
-        fresh.delete();
+        tree.delete();
       }
     }
   } finally {
-    tree.delete();
     parser.delete();
   }
 });

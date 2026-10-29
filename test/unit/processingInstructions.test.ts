@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Edit, Language, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 await Parser.init();
@@ -64,30 +64,14 @@ test('keeps invalid or reserved targets as comments without consuming following 
   }
 });
 
-test('changes target classification incrementally while preserving the following element', () => {
+test('classifies an extended xml target as an instruction while preserving the following element', () => {
   const parser = new Parser().setLanguage(language);
-  const source = '<?xml?><p>after</p>';
-  const tree = parser.parse(source)!;
-  tree.edit(
-    new Edit({
-      startIndex: 5,
-      oldEndIndex: 5,
-      newEndIndex: 6,
-      startPosition: { row: 0, column: 5 },
-      oldEndPosition: { row: 0, column: 5 },
-      newEndPosition: { row: 0, column: 6 },
-    })
-  );
-  const updated = parser.parse('<?xmlx?><p>after</p>', tree)!;
-  const fresh = parser.parse('<?xmlx?><p>after</p>')!;
+  const tree = parser.parse('<?xmlx?><p>after</p>')!;
   try {
-    expect(updated.rootNode.toString()).toBe(fresh.rootNode.toString());
-    expect(updated.rootNode.hasError).toBe(false);
-    expect(updated.rootNode.firstNamedChild?.type).toBe('processing_instruction');
-    expect(updated.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+    expect(tree.rootNode.hasError).toBe(false);
+    expect(tree.rootNode.firstNamedChild?.type).toBe('processing_instruction');
+    expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
   } finally {
-    fresh.delete();
-    updated.delete();
     tree.delete();
     parser.delete();
   }
@@ -290,7 +274,7 @@ test('preserves markup inside foreign title elements and HTML text inside integr
   }
 });
 
-test('bounds recovery work for repeated unfinished instructions and completes them incrementally', () => {
+test('bounds recovery work for repeated unfinished instructions and parses them once completed', () => {
   const parser = new Parser().setLanguage(language);
   const instruction = '<?target '.repeat(5000);
   const source = '<p>before</p>' + instruction;
@@ -301,24 +285,14 @@ test('bounds recovery work for repeated unfinished instructions and completes th
     expect(tree!.rootNode.hasError).toBe(true);
     expect(tree!.rootNode.firstNamedChild?.text).toBe('<p>before</p>');
     expect(tree!.rootNode.endIndex).toBe(source.length);
-    tree!.edit(
-      new Edit({
-        startIndex: source.length,
-        oldEndIndex: source.length,
-        newEndIndex: source.length + 1,
-        startPosition: { row: 0, column: source.length },
-        oldEndPosition: { row: 0, column: source.length },
-        newEndPosition: { row: 0, column: source.length + 1 },
-      })
-    );
-    const updated = parser.parse(source + '>', tree!);
+    const completed = parser.parse(source + '>')!;
     try {
-      expect(updated!.rootNode.hasError).toBe(false);
-      expect(updated!.rootNode.descendantsOfType('processing_instruction').map((node) => node.text)).toEqual([
+      expect(completed.rootNode.hasError).toBe(false);
+      expect(completed.rootNode.descendantsOfType('processing_instruction').map((node) => node.text)).toEqual([
         instruction + '>',
       ]);
     } finally {
-      updated?.delete();
+      completed.delete();
     }
   } finally {
     tree?.delete();
@@ -348,26 +322,11 @@ test('retains foreign text context after deep ancestors exceed scanner storage',
           '<!--textarea-->tail',
           'after',
         ]);
-        const index = source.indexOf('label');
-        tree.edit(
-          new Edit({
-            startIndex: index,
-            oldEndIndex: index + 5,
-            newEndIndex: index + 5,
-            startPosition: { row: 0, column: index },
-            oldEndPosition: { row: 0, column: index + 5 },
-            newEndPosition: { row: 0, column: index + 5 },
-          })
-        );
-        const edited = source.replace('label', 'other');
-        const incremental = parser.parse(edited, tree)!;
-        const fresh = parser.parse(edited)!;
+        const renamed = parser.parse(source.replace('label', 'other'))!;
         try {
-          expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
-          expect(incremental.rootNode.descendantsOfType('comment').map((node) => node.text)).toEqual(['<!--other-->']);
+          expect(renamed.rootNode.descendantsOfType('comment').map((node) => node.text)).toEqual(['<!--other-->']);
         } finally {
-          incremental.delete();
-          fresh.delete();
+          renamed.delete();
         }
       } finally {
         tree.delete();

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Edit, Language, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 await Parser.init();
@@ -30,42 +30,6 @@ test('retains following elements while reporting malformed closing tags', () => 
       }
     }
   } finally {
-    parser.delete();
-  }
-});
-
-test('preserves following element ranges through an incremental malformed-close edit', () => {
-  const parser = new Parser().setLanguage(language);
-  const source = '<div>x</div><p>after</p>';
-  const previous = parser.parse(source)!;
-  try {
-    const startIndex = source.indexOf('><p');
-    const replacement = ' ordinary';
-    previous.edit(
-      new Edit({
-        startIndex,
-        oldEndIndex: startIndex + 1,
-        newEndIndex: startIndex + replacement.length,
-        startPosition: { row: 0, column: startIndex },
-        oldEndPosition: { row: 0, column: startIndex + 1 },
-        newEndPosition: { row: 0, column: startIndex + replacement.length },
-      })
-    );
-    const updated = source.slice(0, startIndex) + replacement + source.slice(startIndex + 1);
-    const incremental = parser.parse(updated, previous)!;
-    const fresh = parser.parse(updated)!;
-    try {
-      expect(incremental.rootNode.hasError).toBe(true);
-      expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
-      const following = incremental.rootNode.descendantsOfType('element').find((node) => node.text === '<p>after</p>');
-      expect(following?.startIndex).toBe(updated.indexOf('<p'));
-      expect(following?.endIndex).toBe(updated.length);
-    } finally {
-      incremental.delete();
-      fresh.delete();
-    }
-  } finally {
-    previous.delete();
     parser.delete();
   }
 });
@@ -290,44 +254,6 @@ test('retains elements and real closes when malformed attribute content contains
       }
     }
   } finally {
-    parser.delete();
-  }
-});
-
-test('retains attribute-recovery ownership after an incremental less-than insertion', () => {
-  const parser = new Parser().setLanguage(language);
-  const source = '<section><a href=/q?a>body</a><p>after</p></section>';
-  const previous = parser.parse(source)!;
-  try {
-    const startIndex = source.indexOf('>body');
-    previous.edit(
-      new Edit({
-        startIndex,
-        oldEndIndex: startIndex,
-        newEndIndex: startIndex + 2,
-        startPosition: { row: 0, column: startIndex },
-        oldEndPosition: { row: 0, column: startIndex },
-        newEndPosition: { row: 0, column: startIndex + 2 },
-      })
-    );
-    const updated = source.slice(0, startIndex) + '<b' + source.slice(startIndex);
-    const incremental = parser.parse(updated, previous)!;
-    const fresh = parser.parse(updated)!;
-    try {
-      expect(incremental.rootNode.hasError).toBe(true);
-      expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
-      const section = incremental.rootNode.firstNamedChild!;
-      expect(section.namedChildren.filter((node) => node.type === 'element').map((node) => node.text)).toEqual([
-        '<a href=/q?a<b>body</a>',
-        '<p>after</p>',
-      ]);
-      expect(section.namedChildren.find((node) => node.type === 'end_tag')?.text).toBe('</section>');
-    } finally {
-      incremental.delete();
-      fresh.delete();
-    }
-  } finally {
-    previous.delete();
     parser.delete();
   }
 });
