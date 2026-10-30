@@ -8,8 +8,6 @@
       "path": ".",
       "external-files": ["src/tag.h", "src/attributeEntity.h", "src/entities.h"],
       "file-types": ["html"],
-      "highlights": "queries/highlights.scm",
-      "injections": "queries/injections.scm",
       "injection-regex": "html"
     }
   ],

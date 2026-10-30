@@ -15,7 +15,6 @@ build = "bindings/rust/build.rs"
 include = [
   "bindings/rust/*",
   "/grammar.js",
-  "queries/*.scm",
   "src/*.c",
   "src/*.h",
   "src/*.json",
