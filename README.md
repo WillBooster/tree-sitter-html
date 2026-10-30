@@ -21,7 +21,7 @@ it. Input that contains NUL characters can parse to a different tree than with u
 lexers that generator emits treat a NUL character as an ordinary character. This grammar also accepts literal `>`
 characters and bare `&` in text nodes, which upstream 0.23.2 rejects. A bare `&` becomes its own `text` node beside
 surrounding text, while character references remain `entity` nodes. Text nodes include leading, trailing, and whitespace-only content, including whitespace between markup and character references. A DOCTYPE declaration exposes its uninterpreted body as a `doctype_value` child, including legacy PUBLIC or SYSTEM identifiers. Processing instructions use source-preserving
-`processing_instruction` nodes and directive highlights. Delimited `xml` and `xml-stylesheet` targets in any ASCII
+`processing_instruction` nodes. Delimited `xml` and `xml-stylesheet` targets in any ASCII
 case, including XML declarations, and malformed targets produce `comment` nodes. Valid targets start with an ASCII
 letter or `_` and continue with ASCII letters, digits, `-` or `_`. A valid-target instruction without a closing `>`
 reports an error. In HTML-namespace `title` and `textarea`, tags, comments,
@@ -36,11 +36,11 @@ name boundary instead of the HTML tokenizer's replacement-character behavior.
 In the HTML namespace, a trailing
 slash on a `script` or `style` opening tag remains part of its `start_tag`; it does not close the element, so subsequent
 content remains raw text until the matching end tag. Self-closing foreign-namespace `script` and `style` use ordinary element nodes. Complete foreign
-elements retain raw-text nodes and injection ranges, including CDATA delimiters. MathML `annotation-xml` with an `encoding` value of `text/html` or `application/xhtml+xml`
+elements retain raw-text nodes, including CDATA delimiters. MathML `annotation-xml` with an `encoding` value of `text/html` or `application/xhtml+xml`
 uses HTML parsing for its children. Encoding comparisons ignore ASCII case and decode character references. Script content follows
 HTML escaped and double-escaped states, so closing-tag text inside a double escape remains raw text. A script that reaches
 EOF while scanning raw content closes implicitly without an error: its `script_element` has no `end_tag` child, and its
-remaining content stays available for JavaScript injection. Incomplete closing tags such as `</script` still report
+remaining content stays in its `raw_text` node. Incomplete closing tags such as `</script` still report
 recovery errors. Unterminated style elements still report an error. HTML-namespace void elements such as `<input>` and
 `<br/>` use `void_element` nodes with direct `tag_name` and `attribute` children. Following text, entities, comments,
 and processing instructions are siblings, and explicit void-element end tags are `erroneous_end_tag` siblings.
@@ -58,9 +58,8 @@ Attribute values use distinct `unquoted_attribute_value`, `singlequoted_attribut
 `doublequoted_attribute_value` nodes directly inside `attribute`. Quoted nodes include both delimiters and retain an
 `attribute_value` child for nonempty content; empty quoted values have no content child. Unquoted nodes cover the value
 without surrounding whitespace. Recognized named and numeric character references are `entity` children of the content
-node. Other content, including literal ampersands, has no child nodes. Injections that need quote-free value content can
-capture `attribute_value` and `unquoted_attribute_value`; set `injection.include-children` when they need the original
-reference spellings as well. The highlight query captures those same content nodes, excluding quote delimiters.
+node. Other content, including literal ampersands, has no child nodes. The quote-free content of a value is its
+`attribute_value` or `unquoted_attribute_value` node.
 Legacy names without a semicolon remain literal before an ASCII letter, digit, or `=`; unknown names and incomplete
 numeric prefixes remain literal. Comments are document or element content and are not accepted between attributes.
 Comment-shaped text inside a quoted value remains part of that value. Whitespace after `=` separates the operator from
