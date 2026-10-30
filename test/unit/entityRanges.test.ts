@@ -6,7 +6,7 @@ import { expect, test } from 'vitest';
 await Parser.init();
 const language = await Language.load(path.join(import.meta.dirname, '../../tree-sitter-html.wasm'));
 
-test('queries complete named and numeric character-reference ranges', () => {
+test('parses complete named and numeric character-reference ranges', () => {
   const parser = new Parser().setLanguage(language);
   const query = new Query(language, '(entity) @reference');
   try {
@@ -44,7 +44,7 @@ test('queries complete named and numeric character-reference ranges', () => {
   }
 });
 
-test('keeps incomplete numeric prefixes and raw element content out of entity captures', () => {
+test('keeps incomplete numeric prefixes and raw element content out of entity nodes', () => {
   const parser = new Parser().setLanguage(language);
   try {
     for (const source of [

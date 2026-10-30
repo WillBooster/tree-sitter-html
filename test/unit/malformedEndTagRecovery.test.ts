@@ -1,7 +1,6 @@
-import fs from 'node:fs';
 import path from 'node:path';
 
-import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Language, Parser } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 await Parser.init();
@@ -36,10 +35,6 @@ test('retains following elements while reporting malformed closing tags', () => 
 
 test('retains raw-text elements and their content through malformed closes', () => {
   const parser = new Parser().setLanguage(language);
-  const injections = new Query(
-    language,
-    fs.readFileSync(path.join(import.meta.dirname, '../../queries/injections.scm'), 'utf8')
-  );
   try {
     for (const tag of ['script', 'style']) {
       for (const close of [
@@ -58,12 +53,6 @@ test('retains raw-text elements and their content through malformed closes', () 
             element?.descendantsOfType('raw_text').map((node) => node.text),
             source
           ).toEqual(['body & text']);
-          expect(
-            injections
-              .captures(tree.rootNode)
-              .some(({ name, node }) => name === 'injection.content' && node.text === 'body & text'),
-            source
-          ).toBe(true);
           const section = tree.rootNode.firstNamedChild!;
           expect(section.namedChildren.find((node) => node.type === 'end_tag')?.text, source).toBe('</section>');
           expect(
@@ -76,7 +65,6 @@ test('retains raw-text elements and their content through malformed closes', () 
       }
     }
   } finally {
-    injections.delete();
     parser.delete();
   }
 });

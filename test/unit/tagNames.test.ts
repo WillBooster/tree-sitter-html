@@ -2,13 +2,12 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Language, Parser } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 const root = path.resolve(import.meta.dirname, '../..');
 await Parser.init();
 const language = await Language.load(path.join(root, 'tree-sitter-html.wasm'));
-const highlights = fs.readFileSync(path.join(root, 'queries/highlights.scm'), 'utf8');
 const names = ['x-é', 'x-α', 'x-名', 'x-a\u0301', 'emotion-😍', 'x-a_b', 'x-a.b', 'x-·', 'x-\u200D', 'x-\u00A0'];
 
 test('retains ancestor ownership and the following element around a rejected long name', () => {
@@ -62,9 +61,8 @@ for (const name of [
   'x-&value',
   `x-${'名'.repeat(100)}`,
 ]) {
-  test(`retains ${name} name ranges and highlights in matched and mismatched tags`, () => {
+  test(`retains ${name} name ranges in matched and mismatched tags`, () => {
     const parser = new Parser().setLanguage(language);
-    const query = new Query(language, highlights);
     try {
       for (const [open, close] of [
         [name, 'x-base'],
@@ -85,10 +83,7 @@ for (const name of [
             ]);
             const starts = [1, source.indexOf('</') + 2, source.lastIndexOf('<p>') + 1, source.lastIndexOf('</p>') + 2];
             expect(
-              query
-                .captures(tree.rootNode)
-                .filter(({ name }) => name === 'tag')
-                .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+              tree.rootNode.descendantsOfType('tag_name').map((node) => [node.text, node.startIndex, node.endIndex])
             ).toEqual(
               [name, name, 'p', 'p'].map((value, index) => [value, starts[index], starts[index]! + value.length])
             );
@@ -98,7 +93,6 @@ for (const name of [
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
@@ -150,9 +144,8 @@ test('keeps attached punctuation in mismatched closing names instead of closing 
   }
 });
 
-test('retains foreign names, HTML text modes and raw-text injections across Unicode wrappers', () => {
+test('retains foreign names, HTML text modes and raw text across Unicode wrappers', () => {
   const parser = new Parser().setLanguage(language);
-  const query = new Query(language, fs.readFileSync(path.join(root, 'queries/injections.scm'), 'utf8'));
   try {
     for (const [prefix, suffix] of [
       ['<x-😍>', '</x-😍>'],
@@ -164,14 +157,13 @@ test('retains foreign names, HTML text modes and raw-text injections across Unic
       try {
         expect(tree.rootNode.hasError, source).toBe(false);
         expect(tree.rootNode.descendantsOfType('text').map((node) => node.text)).toContain('a<b>text');
-        expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual(['const x=1']);
+        expect(tree.rootNode.descendantsOfType('raw_text').map((node) => node.text)).toEqual(['const x=1']);
         expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
       } finally {
         tree.delete();
       }
     }
   } finally {
-    query.delete();
     parser.delete();
   }
 });

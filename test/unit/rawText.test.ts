@@ -1,19 +1,16 @@
-import fs from 'node:fs';
 import path from 'node:path';
 
-import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Language, Parser } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 const root = path.join(import.meta.dirname, '../..');
 await Parser.init();
 const language = await Language.load(path.join(root, 'tree-sitter-html.wasm'));
-const querySource = fs.readFileSync(path.join(root, 'queries/injections.scm'), 'utf8');
 
 for (const tag of ['script', 'style']) {
-  test(`preserves ${tag} injection content through lookalike closing names`, () => {
+  test(`preserves ${tag} raw text through lookalike closing names`, () => {
     const parser = new Parser();
     parser.setLanguage(language);
-    const query = new Query(language, querySource);
     try {
       for (const content of [
         `x</${tag}X><p>still raw</p>`,
@@ -51,25 +48,23 @@ for (const tag of ['script', 'style']) {
             content
           ).toEqual([`${tag}_element`, 'element']);
           expect(
-            query.captures(tree.rootNode).map(({ name, node }) => [name, node.text]),
+            tree.rootNode.descendantsOfType('raw_text').map((node) => node.text),
             content
-          ).toEqual([['injection.content', content]]);
+          ).toEqual([content]);
           expect(tree.rootNode.lastNamedChild?.text, content).toBe('<p>after</p>');
         } finally {
           tree.delete();
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
 }
 
-test('preserves script injection at EOF and before a real closing tag', () => {
+test('preserves script raw text at EOF and before a real closing tag', () => {
   const parser = new Parser();
   parser.setLanguage(language);
-  const query = new Query(language, querySource);
   try {
     for (const content of [
       'console.log(1);',
@@ -81,9 +76,7 @@ test('preserves script injection at EOF and before a real closing tag', () => {
       try {
         expect(tree.rootNode.hasError, content).toBe(false);
         expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual(['script_element']);
-        expect(query.captures(tree.rootNode).map(({ name, node }) => [name, node.text])).toEqual([
-          ['injection.content', content],
-        ]);
+        expect(tree.rootNode.descendantsOfType('raw_text').map((node) => node.text)).toEqual([content]);
       } finally {
         tree.delete();
       }
@@ -91,13 +84,12 @@ test('preserves script injection at EOF and before a real closing tag', () => {
       try {
         expect(closed.rootNode.hasError).toBe(false);
         expect(closed.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-        expect(query.captures(closed.rootNode).map(({ node }) => node.text)).toEqual([content + '-->']);
+        expect(closed.rootNode.descendantsOfType('raw_text').map((node) => node.text)).toEqual([content + '-->']);
       } finally {
         closed.delete();
       }
     }
   } finally {
-    query.delete();
     parser.delete();
   }
 });
@@ -105,7 +97,6 @@ test('preserves script injection at EOF and before a real closing tag', () => {
 for (const tag of ['script', 'style']) {
   test(`keeps ${tag} content inside slash-suffixed opening tags`, () => {
     const parser = new Parser().setLanguage(language);
-    const query = new Query(language, querySource);
     try {
       for (const opener of [`<${tag}>`, `<${tag.toUpperCase()} data-value="a/b">`, `<${tag} data-value=plain >`]) {
         const content = `<${tag}>still raw</${tag}X><b>inside</b>`;
@@ -117,15 +108,14 @@ for (const tag of ['script', 'style']) {
           expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual([`${tag}_element`, 'element']);
           expect(tree.rootNode.firstNamedChild?.firstNamedChild?.text).toBe(source.slice(0, opener.length + 1));
           expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-          expect(query.captures(tree.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])).toEqual([
-            [content, opener.length + 1, opener.length + 1 + content.length],
-          ]);
+          expect(
+            tree.rootNode.descendantsOfType('raw_text').map((node) => [node.text, node.startIndex, node.endIndex])
+          ).toEqual([[content, opener.length + 1, opener.length + 1 + content.length]]);
         } finally {
           tree.delete();
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
@@ -133,7 +123,6 @@ for (const tag of ['script', 'style']) {
 
 test('self-closes foreign raw-element names and retains HTML raw text at integration points', () => {
   const parser = new Parser().setLanguage(language);
-  const query = new Query(language, querySource);
   try {
     for (const [prefix, suffix] of [
       ['<svg>', '</svg>'],
@@ -149,7 +138,7 @@ test('self-closes foreign raw-element names and retains HTML raw text at integra
           '<path/>',
         ]);
         expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-        expect(query.captures(tree.rootNode)).toHaveLength(0);
+        expect(tree.rootNode.descendantsOfType('raw_text')).toHaveLength(0);
       } finally {
         tree.delete();
       }
@@ -167,20 +156,18 @@ test('self-closes foreign raw-element names and retains HTML raw text at integra
       try {
         expect(tree.rootNode.hasError).toBe(false);
         expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-        expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual(['let a = 1;']);
+        expect(tree.rootNode.descendantsOfType('raw_text').map((node) => node.text)).toEqual(['let a = 1;']);
       } finally {
         tree.delete();
       }
     }
   } finally {
-    query.delete();
     parser.delete();
   }
 });
 
 test('retains raw content at encoding-dependent MathML integration points', () => {
   const parser = new Parser().setLanguage(language);
-  const query = new Query(language, querySource);
   try {
     for (const attributes of [
       'encoding="text/html"',
@@ -196,7 +183,10 @@ test('retains raw content at encoding-dependent MathML integration points', () =
       try {
         expect(tree.rootNode.hasError, source).toBe(false);
         expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-        expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual(['if(a<b)c()', 'a>b{color:red}']);
+        expect(tree.rootNode.descendantsOfType('raw_text').map((node) => node.text)).toEqual([
+          'if(a<b)c()',
+          'a>b{color:red}',
+        ]);
       } finally {
         tree.delete();
       }
@@ -215,7 +205,7 @@ test('retains raw content at encoding-dependent MathML integration points', () =
         expect(tree.rootNode.hasError, source).toBe(false);
         expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
         expect(tree.rootNode.descendantsOfType('self_closing_tag')).toHaveLength(2);
-        expect(query.captures(tree.rootNode)).toHaveLength(0);
+        expect(tree.rootNode.descendantsOfType('raw_text')).toHaveLength(0);
       } finally {
         tree.delete();
       }
@@ -226,19 +216,17 @@ test('retains raw content at encoding-dependent MathML integration points', () =
     try {
       expect(tree.rootNode.hasError).toBe(false);
       expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-      expect(query.captures(tree.rootNode)).toHaveLength(0);
+      expect(tree.rootNode.descendantsOfType('raw_text')).toHaveLength(0);
     } finally {
       tree.delete();
     }
   } finally {
-    query.delete();
     parser.delete();
   }
 });
 
 test('retains complete foreign raw-element content and distinguishes slashes in attribute values', () => {
   const parser = new Parser().setLanguage(language);
-  const query = new Query(language, querySource);
   try {
     for (const tag of ['script', 'style']) {
       const content = '<![CDATA[if(a<b)c()]]>';
@@ -248,7 +236,7 @@ test('retains complete foreign raw-element content and distinguishes slashes in 
         try {
           expect(tree.rootNode.hasError, source).toBe(false);
           expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-          expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([content]);
+          expect(tree.rootNode.descendantsOfType('raw_text').map((node) => node.text)).toEqual([content]);
           if (attributes) {
             expect(
               tree.rootNode.descendantsOfType(['attribute_value', 'unquoted_attribute_value']).map((node) => node.text)
@@ -264,12 +252,11 @@ test('retains complete foreign raw-element content and distinguishes slashes in 
       expect(tree.rootNode.hasError).toBe(false);
       expect(tree.rootNode.descendantsOfType('self_closing_tag')).toHaveLength(2);
       expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-      expect(query.captures(tree.rootNode)).toHaveLength(0);
+      expect(tree.rootNode.descendantsOfType('raw_text')).toHaveLength(0);
     } finally {
       tree.delete();
     }
   } finally {
-    query.delete();
     parser.delete();
   }
 });

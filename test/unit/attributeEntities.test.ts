@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 
 import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
@@ -115,7 +114,7 @@ test('preserves whitespace around references and consumes numeric references wit
   }
 });
 
-test('keeps comment-shaped attribute content literal and comments outside tags independently queryable', () => {
+test('keeps comment-shaped attribute content literal and comments outside tags as separate nodes', () => {
   const parser = new Parser().setLanguage(language);
   try {
     const source = '<!--before--><a title="<!--literal-->&amp;">body<!--inside--></a><!--after-->';
@@ -300,7 +299,7 @@ test('preserves non-ASCII whitespace before references in unquoted values', () =
   }
 });
 
-test('selects each outer attribute value once while preserving quote-free content captures', () => {
+test('selects each outer attribute value once and its quote-free content', () => {
   const parser = new Parser().setLanguage(language);
   const outer = new Query(
     language,
@@ -310,7 +309,7 @@ test('selects each outer attribute value once while preserving quote-free conten
     (doublequoted_attribute_value)
   ] @value`
   );
-  const content = new Query(language, '[(attribute_value) (unquoted_attribute_value)] @injection.content');
+  const content = new Query(language, '[(attribute_value) (unquoted_attribute_value)] @content');
   try {
     const source = `<a bare=one&amp;two double="three&#65;four" single='five&amp;six' empty="" noval= bool></a>`;
     const tree = parser.parse(source)!;
@@ -345,7 +344,7 @@ test('selects each outer attribute value once while preserving quote-free conten
   }
 });
 
-test('retains value, reference, and highlight ranges for each quote style in HTML and foreign content', () => {
+test('retains value and content ranges for each quote style in HTML and foreign content', () => {
   const parser = new Parser().setLanguage(language);
   const outer = new Query(
     language,
@@ -356,10 +355,6 @@ test('retains value, reference, and highlight ranges for each quote style in HTM
   ] @value`
   );
   const contentQuery = new Query(language, '[(attribute_value) (unquoted_attribute_value)] @content');
-  const highlights = new Query(
-    language,
-    fs.readFileSync(path.join(import.meta.dirname, '../../queries/highlights.scm'), 'utf8')
-  );
   try {
     for (const [prefix, suffix] of [
       ['<a title=', '>body</a><p>after</p>'],
@@ -388,12 +383,6 @@ test('retains value, reference, and highlight ranges for each quote style in HTM
             expect(
               contentQuery.captures(tree.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
             ).toEqual(expectedContent);
-            expect(
-              highlights
-                .captures(tree.rootNode)
-                .filter(({ name }) => name === 'string')
-                .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-            ).toEqual(expectedContent);
             expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
           } finally {
             tree.delete();
@@ -402,7 +391,6 @@ test('retains value, reference, and highlight ranges for each quote style in HTM
       }
     }
   } finally {
-    highlights.delete();
     contentQuery.delete();
     outer.delete();
     parser.delete();

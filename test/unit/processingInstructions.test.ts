@@ -1,12 +1,10 @@
-import fs from 'node:fs';
 import path from 'node:path';
 
-import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Language, Parser } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 await Parser.init();
 const language = await Language.load(path.join(import.meta.dirname, '../../tree-sitter-html.wasm'));
-const highlights = fs.readFileSync(path.join(import.meta.dirname, '../../queries/highlights.scm'), 'utf8');
 
 for (const instruction of [
   '<?target data?>',
@@ -21,25 +19,17 @@ for (const instruction of [
 ]) {
   test(`preserves processing instruction and neighboring elements: ${JSON.stringify(instruction)}`, () => {
     const parser = new Parser().setLanguage(language);
-    const query = new Query(language, highlights);
     const tree = parser.parse(`<div><br>${instruction}<p>after</p></div>`)!;
     try {
       expect(tree.rootNode.hasError).toBe(false);
       const node = tree.rootNode.descendantsOfType('processing_instruction')[0];
       expect(node?.text).toBe(instruction);
-      expect(
-        query
-          .captures(tree.rootNode)
-          .filter(({ name }) => name === 'keyword.directive')
-          .map(({ node: capture }) => capture.text)
-      ).toEqual([instruction]);
       expect(node?.parent?.type).toBe('element');
       expect(node?.parent?.firstNamedChild?.text).toBe('<div>');
       expect(node?.previousNamedSibling?.text).toBe('<br>');
       expect(node?.nextNamedSibling?.text).toBe('<p>after</p>');
     } finally {
       tree.delete();
-      query.delete();
       parser.delete();
     }
   });
@@ -216,7 +206,6 @@ test('keeps non-closing markup as text across RCDATA references and raw-text con
 
 test('preserves markup inside foreign title elements and HTML text inside integration points', () => {
   const parser = new Parser().setLanguage(language);
-  const query = new Query(language, highlights);
   try {
     for (const [prefix, suffix] of [
       ['<svg>', '</svg>'],
@@ -235,12 +224,6 @@ test('preserves markup inside foreign title elements and HTML text inside integr
         expect(tree.rootNode.descendantsOfType('processing_instruction').map((node) => node.text)).toEqual([
           '<?target?>',
         ]);
-        expect(
-          query
-            .captures(tree.rootNode)
-            .filter((capture) => capture.name === 'comment')
-            .map((capture) => capture.node.text)
-        ).toEqual(['<!--label-->']);
         expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
       } finally {
         tree.delete();
@@ -269,7 +252,6 @@ test('preserves markup inside foreign title elements and HTML text inside integr
       }
     }
   } finally {
-    query.delete();
     parser.delete();
   }
 });

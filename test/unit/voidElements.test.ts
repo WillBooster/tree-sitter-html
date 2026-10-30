@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 
 import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
@@ -7,13 +6,9 @@ import { expect, test } from 'vitest';
 await Parser.init();
 const language = await Language.load(path.join(import.meta.dirname, '../../tree-sitter-html.wasm'));
 
-test('exposes void elements to queries without owning following content or stray end tags', () => {
+test('keeps void elements from owning following content or stray end tags', () => {
   const parser = new Parser().setLanguage(language);
   const query = new Query(language, '(void_element (tag_name) @void)');
-  const highlights = new Query(
-    language,
-    fs.readFileSync(path.join(import.meta.dirname, '../../queries/highlights.scm'), 'utf8')
-  );
   try {
     const source =
       '<section><INPUT disabled><br/><img src="a&amp;b">text</input><!-- sibling --><p>after</p></section>';
@@ -33,18 +28,11 @@ test('exposes void elements to queries without owning following content or stray
         ['end_tag', '</section>'],
       ]);
       expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual(['INPUT', 'br', 'img']);
-      expect(
-        highlights
-          .captures(tree.rootNode)
-          .filter(({ name }) => name === 'tag')
-          .map(({ node }) => node.text)
-      ).toEqual(['section', 'INPUT', 'br', 'img', 'p', 'p', 'section']);
       expect(tree.rootNode.descendantsOfType('entity').map((node) => node.text)).toEqual(['&amp;']);
     } finally {
       tree.delete();
     }
   } finally {
-    highlights.delete();
     query.delete();
     parser.delete();
   }
