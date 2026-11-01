@@ -38,8 +38,26 @@ test('recovers from an error on each line in linear time', { timeout: 60_000 }, 
   expectLinearParseTime('<p a=\n'.repeat(2000), '<p a=\n'.repeat(20_000), true);
 });
 
-test('skips repeated open names when recovering unmatched end tags in linear time', { timeout: 60_000 }, () => {
-  expectLinearParseTime('<b></i>'.repeat(2000), '<b></i>'.repeat(20_000), true);
+test('looks up unmatched end tags below repeated and alternating opens in linear time', { timeout: 60_000 }, () => {
+  for (const open of ['<xyz>', '<section><x-a>']) {
+    const source = (count: number): string => `${open.repeat(count)}x${'</abc>'.repeat(count)}`;
+    expectLinearParseTime(source(2000), source(20_000), true);
+  }
+});
+
+test('drains implicit descendants before a long ancestor close in linear time', { timeout: 60_000 }, () => {
+  for (const count of [1000, 10_000]) {
+    const tree = parser.parse(longAncestorClose(count))!;
+    try {
+      expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual(['element', 'element']);
+      expect(tree.rootNode.firstNamedChild?.lastNamedChild?.text).toBe(`</x-${'a'.repeat(count)}>`);
+      expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+      expect(tree.rootNode.descendantsOfType('start_tag')).toHaveLength(count + 2);
+    } finally {
+      tree.delete();
+    }
+  }
+  expectLinearParseTime(longAncestorClose(1000), longAncestorClose(10_000), false);
 });
 
 test('parses deeply nested repeated and alternating tags in linear time', { timeout: 60_000 }, () => {
@@ -72,6 +90,11 @@ test.each([' ', '/', ' a=x '])('reads malformed long tag names in linear input w
   });
   expect(reads[1]! / reads[0]!).toBeLessThan(6);
 });
+
+function longAncestorClose(count: number): string {
+  const name = `x-${'a'.repeat(count)}`;
+  return `<${name}>${'<section>'.repeat(count)}x</${name}><p>after</p>`;
+}
 
 function expectLinearParseTime(small: string, large: string, hasError: boolean): void {
   parseCpuTime(large, hasError);

@@ -1,4 +1,4 @@
-// code-gauge-allow-file fileNcss 557 -- The external scanner state machines form one cohesive module; splitting unrelated routines would only relocate this size.
+// code-gauge-allow-file fileNcss 610 -- The external scanner state machines form one cohesive module; splitting unrelated routines would only relocate this size.
 #include "tag.h"
 #include "tree_sitter/parser.h"
 #include "attributeEntity.h"
@@ -33,14 +33,25 @@ typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH, NAMESPACE_MATH_ANN
 typedef struct {
     Tag tag;
     uint32_t parent;
-    uint32_t previous_distinct;
+    uint32_t names;
     Namespace namespace;
     Namespace child_namespace;
 } TagFrame;
 
+_Static_assert(END_ <= UINT8_MAX, "Tag types must fit the name trie prefix");
+
 typedef struct {
+    uint32_t children[2];
+    bool present;
+} NameNode;
+
+typedef struct {
+    Array(NameNode) names;
     Array(TagFrame) frames;
     uint32_t current;
+    uint32_t closing_position;
+    uint32_t closing_next;
+    uint32_t closing_target;
 } Scanner;
 
 static Namespace child_namespace(Namespace current, const Tag *tag);
@@ -60,15 +71,14 @@ static inline Tag *top_tag(Scanner *scanner) {
     return scanner->current == 0 ? NULL : &scanner->frames.contents[scanner->current - 1].tag;
 }
 
+static uint32_t insert_name(Scanner *scanner, uint32_t root, const Tag *tag);
+
 static void push_tag(Scanner *scanner, Tag tag) {
     Namespace parent = scanner->current == 0 ? NAMESPACE_HTML
         : scanner->frames.contents[scanner->current - 1].child_namespace;
     Namespace current = tag_namespace(parent, &tag);
-    uint32_t previous_distinct = scanner->current;
-    if (previous_distinct && tag_eq(top_tag(scanner), &tag)) {
-        previous_distinct = scanner->frames.contents[previous_distinct - 1].previous_distinct;
-    }
-    TagFrame frame = {tag, scanner->current, previous_distinct, current, child_namespace(current, &tag)};
+    uint32_t names = scanner->current == 0 ? 0 : scanner->frames.contents[scanner->current - 1].names;
+    TagFrame frame = {tag, scanner->current, insert_name(scanner, names, &tag), current, child_namespace(current, &tag)};
     array_push(&scanner->frames, frame);
     scanner->current = scanner->frames.size;
 }
@@ -90,6 +100,50 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
         memcpy(&scanner->current, buffer, sizeof(scanner->current));
         assert(scanner->current <= scanner->frames.size);
     }
+}
+
+static unsigned name_bit(const Tag *tag, size_t bit);
+
+static uint32_t insert_name(Scanner *scanner, uint32_t root, const Tag *tag) {
+    Array(uint32_t) path = array_new();
+    size_t bits = (tag->type == CUSTOM ? (size_t)tag->custom_tag_name.size + 1 : 1) * 8;
+    uint32_t current = root;
+    for (size_t bit = 0; bit < bits; bit++) {
+        array_push(&path, current);
+        current = current ? scanner->names.contents[current - 1].children[name_bit(tag, bit)] : 0;
+    }
+    if (current && scanner->names.contents[current - 1].present) {
+        array_delete(&path);
+        return root;
+    }
+    NameNode node = current ? scanner->names.contents[current - 1] : (NameNode){{0, 0}, false};
+    node.present = true;
+    array_push(&scanner->names, node);
+    current = scanner->names.size;
+    for (size_t bit = bits; bit > 0; bit--) {
+        uint32_t previous = path.contents[bit - 1];
+        node = previous ? scanner->names.contents[previous - 1] : (NameNode){{0, 0}, false};
+        node.children[name_bit(tag, bit - 1)] = current;
+        array_push(&scanner->names, node);
+        current = scanner->names.size;
+    }
+    array_delete(&path);
+    return current;
+}
+
+static bool has_open_tag(const Scanner *scanner, const Tag *tag) {
+    uint32_t current = scanner->current == 0 ? 0 : scanner->frames.contents[scanner->current - 1].names;
+    size_t bits = (tag->type == CUSTOM ? (size_t)tag->custom_tag_name.size + 1 : 1) * 8;
+    for (size_t bit = 0; bit < bits && current; bit++) {
+        current = scanner->names.contents[current - 1].children[name_bit(tag, bit)];
+    }
+    return current && scanner->names.contents[current - 1].present;
+}
+
+static unsigned name_bit(const Tag *tag, size_t bit) {
+    unsigned type = tag->type == ANNOTATION_XML_HTML ? ANNOTATION_XML : tag->type;
+    unsigned byte = bit < 8 ? type : (uint8_t)tag->custom_tag_name.contents[bit / 8 - 1];
+    return (byte >> (bit % 8)) & 1;
 }
 
 static inline int32_t ascii_upper(int32_t character);
@@ -416,9 +470,19 @@ static bool is_html_whitespace(int32_t character) {
 static bool scan_foreign_breakout(const Scanner *scanner, TSLexer *lexer, const Tag *tag, bool closing);
 static bool tag_starts_foreign_breakout(const Tag *tag, TSLexer *lexer);
 
-// code-gauge-allow functionCognitiveComplexity 26 -- One lookahead decides optional ends, raw-text recovery and foreign-content boundaries; extracting branches only relocates these decisions.
-// code-gauge-allow functionNcss 36 -- These decisions share the scanned next tag and its ownership.
+// code-gauge-allow functionCognitiveComplexity 28 -- One lookahead decides optional ends, raw-text recovery and foreign-content boundaries; extracting branches only relocates these decisions.
+// code-gauge-allow functionNcss 47 -- These decisions share the scanned next tag and its ownership.
 static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
+    TSLexerPosition position;
+    lexer->get_position(lexer, &position);
+    if (lexer->lookahead == '/' && scanner->current && scanner->closing_target &&
+        scanner->closing_position == position.bytes && scanner->current == scanner->closing_next &&
+        scanner->current != scanner->closing_target) {
+        pop_tag(scanner);
+        scanner->closing_next = scanner->current;
+        lexer->result_symbol = IMPLICIT_END_TAG;
+        return true;
+    }
     Tag *parent = top_tag(scanner);
 
     if (parent && parent->type == STYLE && lexer->eof(lexer)) {
@@ -450,11 +514,15 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
         if (parent && tag_eq(parent, &next_tag)) {
             implicit = (parent->type == SCRIPT || parent->type == STYLE) && !accepts_tag_suffix(lexer, true, NULL);
         } else {
-            for (uint32_t i = scanner->current; i > 0; i = scanner->frames.contents[i - 1].previous_distinct) {
-                if (tag_eq(&scanner->frames.contents[i - 1].tag, &next_tag)) {
-                    implicit = true;
-                    break;
+            implicit = has_open_tag(scanner, &next_tag);
+            if (implicit) {
+                uint32_t target = scanner->current;
+                while (!tag_eq(&scanner->frames.contents[target - 1].tag, &next_tag)) {
+                    target = scanner->frames.contents[target - 1].parent;
                 }
+                scanner->closing_position = position.bytes;
+                scanner->closing_next = scanner->frames.contents[scanner->current - 1].parent;
+                scanner->closing_target = target;
             }
         }
     } else if (parent) {
@@ -811,5 +879,6 @@ void tree_sitter_html_external_scanner_destroy(void *payload) {
         tag_free(&scanner->frames.contents[i].tag);
     }
     array_delete(&scanner->frames);
+    array_delete(&scanner->names);
     ts_free(scanner);
 }
