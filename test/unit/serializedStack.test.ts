@@ -171,7 +171,7 @@ test('keeps memory bounded while parsing sequential long custom names', () => {
       tree.delete();
       parser.delete();
     }
-    console.log(process.resourceUsage().maxRSS);
+    process.stdout.write(String(process.resourceUsage().maxRSS));
   `,
     ],
     { cwd: root, encoding: 'utf8', timeout: 30_000 }
