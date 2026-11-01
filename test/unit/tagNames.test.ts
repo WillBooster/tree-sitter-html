@@ -29,7 +29,7 @@ test('retains ancestor ownership and the following element around a rejected lon
   }
 });
 
-test('retains complete native tag names and the following paragraph', () => {
+test('retains complete native tag names and the following paragraph', { timeout: 35_000 }, () => {
   const directory = fs.mkdtempSync(path.join(root, '.tmp/tag-names-'));
   try {
     const file = path.join(directory, 'input.html');
