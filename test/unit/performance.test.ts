@@ -41,10 +41,14 @@ test('recovers from an error on each line in linear time', { timeout: 60_000 }, 
   expectLinearParseTime('<p a=\n'.repeat(2000), '<p a=\n'.repeat(20_000), true);
 });
 
-// The scanner stores, serializes, and restores its open-tag stack before most tokens, so its cost per token must not
-// grow with the nesting depth of repeated tags.
-test('parses deeply nested repeated tags in linear time', { timeout: 60_000 }, () => {
-  expectLinearParseTime(nestRepeatedTags(1000), nestRepeatedTags(10_000), false);
+test('parses deeply nested repeated and alternating tags in linear time', { timeout: 60_000 }, () => {
+  for (const pair of [
+    ['<xyz>', '</xyz>'],
+    ['<section><x-a>', '</x-a></section>'],
+  ]) {
+    const nest = (depth: number): string => `${pair[0]!.repeat(depth)}x${pair[1]!.repeat(depth)}`;
+    expectLinearParseTime(nest(1000), nest(10_000), false);
+  }
 });
 
 test.each([' ', '/', ' a=x '])('reads malformed long tag names in linear input work at %j', (suffix) => {
@@ -67,10 +71,6 @@ test.each([' ', '/', ' a=x '])('reads malformed long tag names in linear input w
   });
   expect(reads[1]! / reads[0]!).toBeLessThan(6);
 });
-
-function nestRepeatedTags(depth: number): string {
-  return `${'<xyz>'.repeat(depth)}x${'</xyz>'.repeat(depth)}`;
-}
 
 function expectLinearParseTime(small: string, large: string, hasError: boolean): void {
   parseCpuTime(large, hasError);
