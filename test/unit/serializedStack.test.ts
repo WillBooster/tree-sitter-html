@@ -181,6 +181,35 @@ test('keeps memory bounded while parsing sequential long custom names', () => {
   expect(Number(result.stdout.trim())).toBeLessThan(512 * 1024);
 });
 
+test('closes a distant custom ancestor after thousands of distinct nested tags', () => {
+  const parser = new Parser().setLanguage(language);
+  const names = Array.from({ length: 2000 }, (_, index) => `x-layer-${index}`);
+  const prefix = names.map((name) => `<${name}>`).join('');
+  try {
+    for (const close of [
+      names
+        .toReversed()
+        .map((name) => `</${name}>`)
+        .join(''),
+      `</${names[0]}>`,
+    ]) {
+      const tree = parser.parse(`${prefix}body${close}<p>after</p>`)!;
+      try {
+        expect(tree.rootNode.firstNamedChild?.lastNamedChild?.text).toBe(`</${names[0]}>`);
+        expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+        expect(tree.rootNode.descendantsOfType('start_tag').map((node) => node.firstNamedChild?.text)).toEqual([
+          ...names,
+          'p',
+        ]);
+      } finally {
+        tree.delete();
+      }
+    }
+  } finally {
+    parser.delete();
+  }
+});
+
 function checkActiveTags(tree: Tree, text: string): void {
   expect(tree.rootNode.hasError).toBe(false);
   const names = tree.rootNode.descendantsOfType('tag_name');
