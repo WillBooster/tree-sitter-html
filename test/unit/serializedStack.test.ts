@@ -146,6 +146,41 @@ test('retains full long names and matching closes in native parses', () => {
   }
 });
 
+test('keeps memory bounded while parsing sequential long custom names', () => {
+  const result = spawnSync(
+    'node',
+    [
+      '--input-type=module',
+      '-e',
+      `
+    import assert from 'node:assert/strict';
+    import { Language, Parser } from '@willbooster/web-tree-sitter';
+    await Parser.init();
+    const parser = new Parser().setLanguage(await Language.load('tree-sitter-html.wasm'));
+    const name = 'x-' + 'a'.repeat(60_000);
+    const source = ('<' + name + '>body</' + name + '>').repeat(200) + '<p>after</p>';
+    const tree = parser.parse(source);
+    try {
+      assert.equal(tree.rootNode.hasError, false);
+      assert.equal(tree.rootNode.namedChildren.length, 201);
+      for (const element of tree.rootNode.namedChildren.slice(0, -1)) {
+        assert.equal(element.lastNamedChild.text, '</' + name + '>');
+      }
+      assert.equal(tree.rootNode.lastNamedChild.text, '<p>after</p>');
+    } finally {
+      tree.delete();
+      parser.delete();
+    }
+    console.log(process.resourceUsage().maxRSS);
+  `,
+    ],
+    { cwd: root, encoding: 'utf8', timeout: 30_000 }
+  );
+  expect(result.error).toBeUndefined();
+  expect(result.status, result.stderr).toBe(0);
+  expect(Number(result.stdout.trim())).toBeLessThan(512 * 1024);
+});
+
 function checkActiveTags(tree: Tree, text: string): void {
   expect(tree.rootNode.hasError).toBe(false);
   const names = tree.rootNode.descendantsOfType('tag_name');

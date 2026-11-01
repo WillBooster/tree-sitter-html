@@ -1,4 +1,4 @@
-// code-gauge-allow-file fileNcss 610 -- The external scanner state machines form one cohesive module; splitting unrelated routines would only relocate this size.
+// code-gauge-allow-file fileNcss 640 -- The external scanner state machines form one cohesive module; splitting unrelated routines would only relocate this size.
 #include "tag.h"
 #include "tree_sitter/parser.h"
 #include "attributeEntity.h"
@@ -38,11 +38,11 @@ typedef struct {
     Namespace child_namespace;
 } TagFrame;
 
-_Static_assert(END_ <= UINT8_MAX, "Tag types must fit the name trie prefix");
-
 typedef struct {
+    uint64_t hash;
     uint32_t children[2];
-    bool present;
+    uint32_t frame;
+    uint8_t bit;
 } NameNode;
 
 typedef struct {
@@ -102,48 +102,81 @@ static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
     }
 }
 
-static unsigned name_bit(const Tag *tag, size_t bit);
+static uint64_t name_hash(const Tag *tag);
+static unsigned hash_bit(uint64_t hash, uint8_t bit);
+static bool name_matches(const Scanner *scanner, uint32_t leaf, const Tag *tag);
 
+// code-gauge-allow functionNcss 35 -- Trie insertion finds its split, preserves collisions and copies one ancestor path; splitting these phases would only move the shared path bookkeeping.
 static uint32_t insert_name(Scanner *scanner, uint32_t root, const Tag *tag) {
-    Array(uint32_t) path = array_new();
-    size_t bits = (tag->type == CUSTOM ? (size_t)tag->custom_tag_name.size + 1 : 1) * 8;
+    uint64_t hash = name_hash(tag);
+    uint32_t path[64];
+    unsigned depth = 0;
     uint32_t current = root;
-    for (size_t bit = 0; bit < bits; bit++) {
-        array_push(&path, current);
-        current = current ? scanner->names.contents[current - 1].children[name_bit(tag, bit)] : 0;
+    while (current && !scanner->names.contents[current - 1].frame) {
+        const NameNode *node = &scanner->names.contents[current - 1];
+        path[depth++] = current;
+        current = node->children[hash_bit(hash, node->bit)];
     }
-    if (current && scanner->names.contents[current - 1].present) {
-        array_delete(&path);
-        return root;
+    uint32_t collision = 0;
+    if (current && scanner->names.contents[current - 1].hash == hash) {
+        collision = current;
+        if (name_matches(scanner, current, tag)) return root;
     }
-    NameNode node = current ? scanner->names.contents[current - 1] : (NameNode){{0, 0}, false};
-    node.present = true;
-    array_push(&scanner->names, node);
-    current = scanner->names.size;
-    for (size_t bit = bits; bit > 0; bit--) {
-        uint32_t previous = path.contents[bit - 1];
-        node = previous ? scanner->names.contents[previous - 1] : (NameNode){{0, 0}, false};
-        node.children[name_bit(tag, bit - 1)] = current;
+    NameNode leaf = {hash, {collision, 0}, scanner->frames.size + 1, 0};
+    array_push(&scanner->names, leaf);
+    uint32_t inserted = scanner->names.size;
+    if (current && !collision) {
+        uint8_t bit = 0;
+        uint64_t difference = hash ^ scanner->names.contents[current - 1].hash;
+        while (!(difference & (UINT64_C(1) << bit))) bit++;
+        while (depth && scanner->names.contents[path[depth - 1] - 1].bit > bit) current = path[--depth];
+        NameNode branch = {0, {0, 0}, 0, bit};
+        branch.children[hash_bit(hash, bit)] = inserted;
+        branch.children[!hash_bit(hash, bit)] = current;
+        array_push(&scanner->names, branch);
+        inserted = scanner->names.size;
+    }
+    while (depth) {
+        NameNode node = scanner->names.contents[path[--depth] - 1];
+        node.children[hash_bit(hash, node.bit)] = inserted;
         array_push(&scanner->names, node);
-        current = scanner->names.size;
+        inserted = scanner->names.size;
     }
-    array_delete(&path);
-    return current;
+    return inserted;
 }
 
 static bool has_open_tag(const Scanner *scanner, const Tag *tag) {
+    uint64_t hash = name_hash(tag);
     uint32_t current = scanner->current == 0 ? 0 : scanner->frames.contents[scanner->current - 1].names;
-    size_t bits = (tag->type == CUSTOM ? (size_t)tag->custom_tag_name.size + 1 : 1) * 8;
-    for (size_t bit = 0; bit < bits && current; bit++) {
-        current = scanner->names.contents[current - 1].children[name_bit(tag, bit)];
+    while (current && !scanner->names.contents[current - 1].frame) {
+        const NameNode *node = &scanner->names.contents[current - 1];
+        current = node->children[hash_bit(hash, node->bit)];
     }
-    return current && scanner->names.contents[current - 1].present;
+    if (!current || scanner->names.contents[current - 1].hash != hash) return false;
+    return name_matches(scanner, current, tag);
 }
 
-static unsigned name_bit(const Tag *tag, size_t bit) {
+static bool name_matches(const Scanner *scanner, uint32_t leaf, const Tag *tag) {
+    for (; leaf; leaf = scanner->names.contents[leaf - 1].children[0]) {
+        const Tag *candidate = &scanner->frames.contents[scanner->names.contents[leaf - 1].frame - 1].tag;
+        if (tag_eq(candidate, tag)) return true;
+    }
+    return false;
+}
+
+static uint64_t name_hash(const Tag *tag) {
     unsigned type = tag->type == ANNOTATION_XML_HTML ? ANNOTATION_XML : tag->type;
-    unsigned byte = bit < 8 ? type : (uint8_t)tag->custom_tag_name.contents[bit / 8 - 1];
-    return (byte >> (bit % 8)) & 1;
+    uint64_t hash = (UINT64_C(14695981039346656037) ^ type) * UINT64_C(1099511628211);
+    if (tag->type == CUSTOM) {
+        for (unsigned i = 0; i < tag->custom_tag_name.size; i++) {
+            hash = (hash ^ (uint8_t)tag->custom_tag_name.contents[i]) * UINT64_C(1099511628211);
+        }
+    }
+    return hash;
+}
+
+static unsigned hash_bit(uint64_t hash, uint8_t bit) {
+    return (hash >> bit) & 1;
 }
 
 static inline int32_t ascii_upper(int32_t character);
