@@ -34,17 +34,40 @@ test('uses a Wasm build built from the current parser', () => {
 // background threads, which compile the Wasm build and collect garbage during the parses. 2,000 and 20,000 lines are
 // measured after warm-up parses and in alternation, each keeping its fastest run; their ratio is about 10 locally, and
 // 18 leaves a margin over that while failing for growth faster than about n^1.25.
-// Each line is a start tag broken off in an attribute. The scanner keeps a stack of the open elements and walks
-// it for implicit end tags, so lines that each leave an element open (e.g. `<b></i>`) take time that grows faster than
-// the input, with upstream's parser as well.
 test('recovers from an error on each line in linear time', { timeout: 60_000 }, () => {
   expectLinearParseTime('<p a=\n'.repeat(2000), '<p a=\n'.repeat(20_000), true);
 });
 
-// The scanner stores, serializes, and restores its open-tag stack before most tokens, so its cost per token must not
-// grow with the nesting depth of repeated tags.
-test('parses deeply nested repeated tags in linear time', { timeout: 60_000 }, () => {
-  expectLinearParseTime(nestRepeatedTags(1000), nestRepeatedTags(10_000), false);
+test('looks up unmatched end tags below repeated and alternating opens in linear time', { timeout: 60_000 }, () => {
+  for (const open of ['<xyz>', '<section><x-a>']) {
+    const source = (count: number): string => `${open.repeat(count)}x${'</abc>'.repeat(count)}`;
+    expectLinearParseTime(source(2000), source(20_000), true);
+  }
+});
+
+test('drains implicit descendants before a long ancestor close in linear time', { timeout: 60_000 }, () => {
+  for (const count of [1000, 10_000]) {
+    const tree = parser.parse(longAncestorClose(count))!;
+    try {
+      expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual(['element', 'element']);
+      expect(tree.rootNode.firstNamedChild?.lastNamedChild?.text).toBe(`</x-${'a'.repeat(count)}>`);
+      expect(tree.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
+      expect(tree.rootNode.descendantsOfType('start_tag')).toHaveLength(count + 2);
+    } finally {
+      tree.delete();
+    }
+  }
+  expectLinearParseTime(longAncestorClose(1000), longAncestorClose(10_000), false);
+});
+
+test('parses deeply nested repeated and alternating tags in linear time', { timeout: 60_000 }, () => {
+  for (const pair of [
+    ['<xyz>', '</xyz>'],
+    ['<section><x-a>', '</x-a></section>'],
+  ]) {
+    const nest = (depth: number): string => `${pair[0]!.repeat(depth)}x${pair[1]!.repeat(depth)}`;
+    expectLinearParseTime(nest(1000), nest(10_000), false);
+  }
 });
 
 test.each([' ', '/', ' a=x '])('reads malformed long tag names in linear input work at %j', (suffix) => {
@@ -68,8 +91,9 @@ test.each([' ', '/', ' a=x '])('reads malformed long tag names in linear input w
   expect(reads[1]! / reads[0]!).toBeLessThan(6);
 });
 
-function nestRepeatedTags(depth: number): string {
-  return `${'<xyz>'.repeat(depth)}x${'</xyz>'.repeat(depth)}`;
+function longAncestorClose(count: number): string {
+  const name = `x-${'a'.repeat(count)}`;
+  return `<${name}>${'<section>'.repeat(count)}x</${name}><p>after</p>`;
 }
 
 function expectLinearParseTime(small: string, large: string, hasError: boolean): void {

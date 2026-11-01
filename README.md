@@ -47,11 +47,6 @@ and processing instructions are siblings, and explicit void-element end tags are
 In SVG/MathML content outside HTML integration points, HTML breakout start tags such as `<p>` and `<span>` implicitly
 close the foreign ancestors. The same applies to `<font>` with a `color`, `face`, or `size` attribute and to `</br>` or
 `</p>`. Later end tags for those foreign ancestors become `erroneous_end_tag` nodes.
-Scanner serialization stores the open-tag stack from its innermost tag, compressing runs of identical tags, so active
-script and style elements retain their identities when deeply nested. When distinct tags exceed the fixed-size
-buffer, serialization prioritizes inner tags and outer namespace boundaries, replacing ordinary outer tags with unknown
-runs. Custom tag names are retained in full when they fit the remaining buffer. Names that exceed the buffer are
-omitted along with older tags. Lost tag identities can still produce recovery errors when those tags close.
 Malformed input after a void element can replace its enclosing element with an `ERROR` node during recovery.
 
 Attribute values use distinct `unquoted_attribute_value`, `singlequoted_attribute_value`, and
@@ -68,9 +63,9 @@ the value, so `noval= bool` remains one attribute with the unquoted value `bool`
 ## Support Scope
 
 This fork maintains only full parsing: valid input yields a correct tree, and invalid input yields `ERROR` or `MISSING`
-nodes without crashing, hanging, or taking more than linear time. Incremental parsing works as in upstream tree-sitter
-but is not tested here, and no queries (highlights, locals, injections, tags) are shipped. Node types, field names, and
-the trees that error recovery produces may change; such changes are released as new major versions.
+nodes without crashing, hanging, or taking more than linear time. Incremental parsing and reuse of an earlier tree are
+unsupported. No queries (highlights, locals, injections, tags) are shipped. Node types, field names, and the trees that
+error recovery produces may change; such changes are released as new major versions.
 
 ## Usage
 

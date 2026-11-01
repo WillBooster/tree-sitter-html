@@ -1,3 +1,4 @@
+// code-gauge-allow-file fileNcss 640 -- The external scanner state machines form one cohesive module; splitting unrelated routines would only relocate this size.
 #include "tag.h"
 #include "tree_sitter/parser.h"
 #include "attributeEntity.h"
@@ -31,21 +32,30 @@ typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH, NAMESPACE_MATH_ANN
 
 typedef struct {
     Tag tag;
-    unsigned count;
-} TagRun;
+    uint32_t parent;
+    uint32_t names;
+    Namespace namespace;
+    Namespace child_namespace;
+} TagFrame;
 
-// Consecutive identical open tags share one run, so deep repeated nesting stays cheap to scan, serialize, and restore.
 typedef struct {
-    Array(TagRun) tags;
-    Namespace omitted_namespace;
+    uint64_t hash;
+    uint32_t children[2];
+    uint32_t frame;
+    uint8_t bit;
+} NameNode;
+
+typedef struct {
+    Array(NameNode) names;
+    Array(TagFrame) frames;
+    uint32_t current;
+    uint32_t closing_position;
+    uint32_t closing_next;
+    uint32_t closing_target;
 } Scanner;
 
 static Namespace child_namespace(Namespace current, const Tag *tag);
 static Namespace tag_namespace(Namespace current, const Tag *tag);
-static Namespace namespace_after_tag(Namespace current, const Tag *tag);
-
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 static bool scan_contiguous_attribute_content(TSLexer *lexer, const bool *valid_symbols);
 static bool scan_unquoted_attribute_fragment(TSLexer *lexer);
@@ -58,246 +68,115 @@ static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
 static inline void skip(TSLexer *lexer) { lexer->advance(lexer, true); }
 
 static inline Tag *top_tag(Scanner *scanner) {
-    return scanner->tags.size == 0 ? NULL : &array_back(&scanner->tags)->tag;
+    return scanner->current == 0 ? NULL : &scanner->frames.contents[scanner->current - 1].tag;
 }
 
-static void push_tags(Scanner *scanner, Tag tag, unsigned count) {
-    Tag *top = top_tag(scanner);
-    if (top && top->type == tag.type && tag_eq(top, &tag)) {
-        array_back(&scanner->tags)->count += count;
-        tag_free(&tag);
-    } else {
-        array_push(&scanner->tags, ((TagRun){tag, count}));
-    }
+static uint32_t insert_name(Scanner *scanner, uint32_t root, const Tag *tag);
+
+static void push_tag(Scanner *scanner, Tag tag) {
+    Namespace parent = scanner->current == 0 ? NAMESPACE_HTML
+        : scanner->frames.contents[scanner->current - 1].child_namespace;
+    Namespace current = tag_namespace(parent, &tag);
+    uint32_t names = scanner->current == 0 ? 0 : scanner->frames.contents[scanner->current - 1].names;
+    TagFrame frame = {tag, scanner->current, insert_name(scanner, names, &tag), current, child_namespace(current, &tag)};
+    array_push(&scanner->frames, frame);
+    scanner->current = scanner->frames.size;
 }
 
 static void pop_tag(Scanner *scanner) {
-    TagRun *top = array_back(&scanner->tags);
-    if (--top->count == 0) {
-        tag_free(&top->tag);
-        scanner->tags.size--;
-        if (scanner->tags.size == 0) scanner->omitted_namespace = NAMESPACE_HTML;
-    }
+    scanner->current = scanner->frames.contents[scanner->current - 1].parent;
 }
 
-static void clear_tags(Scanner *scanner) {
-    for (unsigned i = 0; i < scanner->tags.size; i++) {
-        tag_free(&scanner->tags.contents[i].tag);
-    }
-    array_clear(&scanner->tags);
-    scanner->omitted_namespace = NAMESPACE_HTML;
-}
-
-// Follows a serialized tag to repeat it the number of times in the next two bytes; no tag type uses this byte.
-#define TAG_RUN_MARKER UINT8_MAX
-#define TAG_RUN_SIZE (1 + sizeof(uint16_t))
-#define LONG_TAG_NAME_MARKER 0
-
-static inline unsigned serialized_tag_size(const Tag *tag) {
-    if (tag->type != CUSTOM) return 1;
-    unsigned name_length = tag->custom_tag_name.size;
-    return 2 + name_length + (name_length > UINT8_MAX ? sizeof(uint16_t) : 0);
-}
-
-static unsigned write_tag(const Tag *tag, char *buffer, unsigned size) {
-    buffer[size++] = (char)tag->type;
-    if (tag->type == CUSTOM) {
-        uint16_t name_length = tag->custom_tag_name.size;
-        if (name_length > UINT8_MAX) {
-            buffer[size++] = LONG_TAG_NAME_MARKER;
-            memcpy(&buffer[size], &name_length, sizeof(name_length));
-            size += sizeof(name_length);
-        } else {
-            buffer[size++] = (char)name_length;
-        }
-        memcpy(&buffer[size], tag->custom_tag_name.contents, name_length);
-        size += name_length;
-    }
-    return size;
-}
-
-static uint16_t write_tag_run(const Tag *tag, uint16_t count, char *buffer, unsigned *size) {
-    unsigned tag_size = serialized_tag_size(tag);
-    if (*size + tag_size > TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
-        return 0;
-    }
-    *size = write_tag(tag, buffer, *size);
-    // A marker that would take more space than the repeated tags would reduce how many distinct tags fit.
-    if (count > 1 && TAG_RUN_SIZE <= tag_size * (count - 1) &&
-        *size + TAG_RUN_SIZE <= TREE_SITTER_SERIALIZATION_BUFFER_SIZE) {
-        buffer[(*size)++] = (char)TAG_RUN_MARKER;
-        memcpy(&buffer[*size], &count, sizeof(count));
-        *size += sizeof(count);
-        return count;
-    }
-    uint16_t written = 1;
-    for (; written < count && *size + tag_size <= TREE_SITTER_SERIALIZATION_BUFFER_SIZE; written++) {
-        *size = write_tag(tag, buffer, *size);
-    }
-    return written;
-}
-
-static unsigned retained_tag_run_start(const Scanner *scanner);
-static bool namespace_boundary_tag(const Tag *tag);
-
-static uint16_t write_unknown_tags(unsigned count, char *buffer, unsigned *size) {
-    Tag unknown = tag_new();
-    return write_tag_run(&unknown, MIN(count, UINT16_MAX), buffer, size);
-}
-
+// The runtime creates a scanner for each full parse and destroys it on reset. Immutable frames keep snapshots
+// valid across parse branches without copying or truncating the open tags into the fixed-size serialization buffer.
 static unsigned serialize(Scanner *scanner, char *buffer) {
-    unsigned depth = 0;
-    for (unsigned i = 0; i < scanner->tags.size; i++) {
-        depth += scanner->tags.contents[i].count;
-    }
-    uint16_t tag_count = MIN(depth, UINT16_MAX);
-    uint16_t serialized_tag_count = 0;
-
-    unsigned size = sizeof(serialized_tag_count);
-    memcpy(&buffer[size], &tag_count, sizeof(tag_count));
-    size += sizeof(tag_count);
-    unsigned namespace_offset = size++;
-
-    unsigned retained_start = retained_tag_run_start(scanner);
-    unsigned unknown_count = 0;
-    for (unsigned i = scanner->tags.size; i > 0 && serialized_tag_count < tag_count; i--) {
-        const TagRun *run = &scanner->tags.contents[i - 1];
-        if (i <= retained_start && !namespace_boundary_tag(&run->tag)) {
-            unknown_count += run->count;
-            continue;
-        }
-        if (unknown_count > 0) {
-            serialized_tag_count += write_unknown_tags(MIN(unknown_count, tag_count - serialized_tag_count), buffer, &size);
-            unknown_count = 0;
-            if (serialized_tag_count == tag_count) break;
-        }
-        uint16_t count = MIN(run->count, (unsigned)(tag_count - serialized_tag_count));
-        uint16_t written = write_tag_run(&run->tag, count, buffer, &size);
-        serialized_tag_count += written;
-        if (written < count) break;
-    }
-    if (unknown_count > 0 && serialized_tag_count < tag_count) {
-        serialized_tag_count += write_unknown_tags(MIN(unknown_count, tag_count - serialized_tag_count), buffer, &size);
-    }
-
-    Namespace boundary = scanner->omitted_namespace;
-    unsigned omitted = depth - serialized_tag_count;
-    for (unsigned i = 0; i < scanner->tags.size && omitted > 0; i++) {
-        const TagRun *run = &scanner->tags.contents[i];
-        unsigned count = MIN(run->count, omitted);
-        for (unsigned j = 0; j < count; j++) {
-            Namespace next = namespace_after_tag(boundary, &run->tag);
-            if (next == boundary) break;
-            boundary = next;
-        }
-        omitted -= count;
-    }
-    buffer[namespace_offset] = (char)boundary;
-    memcpy(&buffer[0], &serialized_tag_count, sizeof(serialized_tag_count));
-    return size;
-}
-
-static unsigned serialized_run_size(const Tag *tag, unsigned count) {
-    if (count == 0) return 0;
-    unsigned size = serialized_tag_size(tag);
-    return MIN((uint64_t)size * count, size + TAG_RUN_SIZE);
-}
-
-static unsigned retained_tag_run_start(const Scanner *scanner) {
-    unsigned capacity = TREE_SITTER_SERIALIZATION_BUFFER_SIZE - 2 * sizeof(uint16_t) - 1;
-    unsigned suffix_size = 0;
-    for (unsigned i = 0; i < scanner->tags.size; i++) {
-        const TagRun *run = &scanner->tags.contents[i];
-        suffix_size += serialized_run_size(&run->tag, run->count);
-    }
-    if (suffix_size <= capacity) return 0;
-    Array(unsigned) prefix_sizes = array_new();
-    array_push(&prefix_sizes, 0);
-    unsigned prefix_size = 0;
-    unsigned unknown_count = 0;
-    Tag unknown = tag_new();
-    for (unsigned i = 0; i < scanner->tags.size; i++) {
-        const TagRun *run = &scanner->tags.contents[i];
-        if (namespace_boundary_tag(&run->tag)) {
-            prefix_size += serialized_run_size(&unknown, unknown_count) + serialized_run_size(&run->tag, run->count);
-            unknown_count = 0;
-        } else {
-            unknown_count += run->count;
-        }
-        array_push(&prefix_sizes, prefix_size + serialized_run_size(&unknown, unknown_count));
-    }
-    unsigned retained_start = 0;
-    while (retained_start < scanner->tags.size && prefix_sizes.contents[retained_start] + suffix_size > capacity) {
-        const TagRun *run = &scanner->tags.contents[retained_start++];
-        suffix_size -= serialized_run_size(&run->tag, run->count);
-    }
-    if (prefix_sizes.contents[retained_start] + suffix_size > capacity) retained_start = 0;
-    array_delete(&prefix_sizes);
-    return retained_start;
-}
-
-static bool namespace_boundary_tag(const Tag *tag) {
-    return tag->type == SVG || tag->type == MATH || tag->type == ANNOTATION_XML ||
-           child_namespace(NAMESPACE_SVG, tag) == NAMESPACE_HTML ||
-           child_namespace(NAMESPACE_MATH, tag) == NAMESPACE_HTML;
-}
-
-static Tag read_tag(const char *buffer, unsigned *size) {
-    Tag tag = tag_new();
-    tag.type = (TagType)(uint8_t)buffer[(*size)++];
-    if (tag.type == CUSTOM) {
-        uint16_t name_length = (uint8_t)buffer[(*size)++];
-        if (name_length == LONG_TAG_NAME_MARKER) {
-            memcpy(&name_length, &buffer[*size], sizeof(name_length));
-            *size += sizeof(name_length);
-        }
-        array_extend(&tag.custom_tag_name, name_length, &buffer[*size]);
-        *size += name_length;
-    }
-    return tag;
-}
-
-static void reverse_tag_runs(Scanner *scanner, unsigned begin) {
-    for (unsigned end = scanner->tags.size; begin + 1 < end; begin++, end--) {
-        TagRun run = scanner->tags.contents[begin];
-        scanner->tags.contents[begin] = scanner->tags.contents[end - 1];
-        scanner->tags.contents[end - 1] = run;
-    }
+    memcpy(buffer, &scanner->current, sizeof(scanner->current));
+    return sizeof(scanner->current);
 }
 
 static void deserialize(Scanner *scanner, const char *buffer, unsigned length) {
-    clear_tags(scanner);
-    if (length == 0) {
-        return;
+    scanner->current = 0;
+    if (length == sizeof(scanner->current)) {
+        memcpy(&scanner->current, buffer, sizeof(scanner->current));
+        assert(scanner->current <= scanner->frames.size);
     }
+}
 
-    unsigned size = 0;
-    uint16_t serialized_tag_count = 0;
-    uint16_t tag_count = 0;
-    memcpy(&serialized_tag_count, &buffer[size], sizeof(serialized_tag_count));
-    size += sizeof(serialized_tag_count);
-    memcpy(&tag_count, &buffer[size], sizeof(tag_count));
-    size += sizeof(tag_count);
-    scanner->omitted_namespace = (Namespace)(uint8_t)buffer[size++];
+static uint64_t name_hash(const Tag *tag);
+static unsigned hash_bit(uint64_t hash, uint8_t bit);
+static bool name_matches(const Scanner *scanner, uint32_t leaf, const Tag *tag);
 
-    if (tag_count > serialized_tag_count) {
-        push_tags(scanner, tag_new(), tag_count - serialized_tag_count);
+// code-gauge-allow functionNcss 35 -- Trie insertion finds its split, preserves collisions and copies one ancestor path; splitting these phases would only move the shared path bookkeeping.
+static uint32_t insert_name(Scanner *scanner, uint32_t root, const Tag *tag) {
+    uint64_t hash = name_hash(tag);
+    uint32_t path[64];
+    unsigned depth = 0;
+    uint32_t current = root;
+    while (current && !scanner->names.contents[current - 1].frame) {
+        const NameNode *node = &scanner->names.contents[current - 1];
+        path[depth++] = current;
+        current = node->children[hash_bit(hash, node->bit)];
     }
+    uint32_t collision = 0;
+    if (current && scanner->names.contents[current - 1].hash == hash) {
+        collision = current;
+        if (name_matches(scanner, current, tag)) return root;
+    }
+    NameNode leaf = {hash, {collision, 0}, scanner->frames.size + 1, 0};
+    array_push(&scanner->names, leaf);
+    uint32_t inserted = scanner->names.size;
+    if (current && !collision) {
+        uint8_t bit = 0;
+        uint64_t difference = hash ^ scanner->names.contents[current - 1].hash;
+        while (!(difference & (UINT64_C(1) << bit))) bit++;
+        while (depth && scanner->names.contents[path[depth - 1] - 1].bit > bit) current = path[--depth];
+        NameNode branch = {0, {0, 0}, 0, bit};
+        branch.children[hash_bit(hash, bit)] = inserted;
+        branch.children[!hash_bit(hash, bit)] = current;
+        array_push(&scanner->names, branch);
+        inserted = scanner->names.size;
+    }
+    while (depth) {
+        NameNode node = scanner->names.contents[path[--depth] - 1];
+        node.children[hash_bit(hash, node.bit)] = inserted;
+        array_push(&scanner->names, node);
+        inserted = scanner->names.size;
+    }
+    return inserted;
+}
 
-    // Serialized tags start from the innermost one, so their runs are pushed in reverse and then put in order.
-    unsigned first_restored_run = scanner->tags.size;
-    unsigned restored_tag_count = 0;
-    while (restored_tag_count < serialized_tag_count) {
-        Tag tag = read_tag(buffer, &size);
-        uint16_t count = 1;
-        if (size < length && (uint8_t)buffer[size] == TAG_RUN_MARKER) {
-            memcpy(&count, &buffer[size + 1], sizeof(count));
-            size += TAG_RUN_SIZE;
+static bool has_open_tag(const Scanner *scanner, const Tag *tag) {
+    uint64_t hash = name_hash(tag);
+    uint32_t current = scanner->current == 0 ? 0 : scanner->frames.contents[scanner->current - 1].names;
+    while (current && !scanner->names.contents[current - 1].frame) {
+        const NameNode *node = &scanner->names.contents[current - 1];
+        current = node->children[hash_bit(hash, node->bit)];
+    }
+    if (!current || scanner->names.contents[current - 1].hash != hash) return false;
+    return name_matches(scanner, current, tag);
+}
+
+static bool name_matches(const Scanner *scanner, uint32_t leaf, const Tag *tag) {
+    for (; leaf; leaf = scanner->names.contents[leaf - 1].children[0]) {
+        const Tag *candidate = &scanner->frames.contents[scanner->names.contents[leaf - 1].frame - 1].tag;
+        if (tag_eq(candidate, tag)) return true;
+    }
+    return false;
+}
+
+static uint64_t name_hash(const Tag *tag) {
+    unsigned type = tag->type == ANNOTATION_XML_HTML ? ANNOTATION_XML : tag->type;
+    uint64_t hash = (UINT64_C(14695981039346656037) ^ type) * UINT64_C(1099511628211);
+    if (tag->type == CUSTOM) {
+        for (unsigned i = 0; i < tag->custom_tag_name.size; i++) {
+            hash = (hash ^ (uint8_t)tag->custom_tag_name.contents[i]) * UINT64_C(1099511628211);
         }
-        restored_tag_count += count;
-        push_tags(scanner, tag, count);
     }
-    reverse_tag_runs(scanner, first_restored_run);
+    return hash;
+}
+
+static unsigned hash_bit(uint64_t hash, uint8_t bit) {
+    return (hash >> bit) & 1;
 }
 
 static inline int32_t ascii_upper(int32_t character);
@@ -427,20 +306,9 @@ static bool in_html_namespace(const Scanner *scanner) {
 }
 
 static Namespace active_namespace(const Scanner *scanner, bool children) {
-    Namespace current = scanner->omitted_namespace;
-    for (unsigned i = 0; i < scanner->tags.size; i++) {
-        const TagRun *run = &scanner->tags.contents[i];
-        current = tag_namespace(current, &run->tag);
-        if (!children && i + 1 == scanner->tags.size && run->count == 1) {
-            return current;
-        }
-        current = child_namespace(current, &run->tag);
-    }
-    return current;
-}
-
-static Namespace namespace_after_tag(Namespace current, const Tag *tag) {
-    return child_namespace(tag_namespace(current, tag), tag);
+    if (scanner->current == 0) return NAMESPACE_HTML;
+    const TagFrame *frame = &scanner->frames.contents[scanner->current - 1];
+    return children ? frame->child_namespace : frame->namespace;
 }
 
 static Namespace tag_namespace(Namespace current, const Tag *tag) {
@@ -548,8 +416,9 @@ typedef enum { RAW_TEXT_NORMAL, RAW_TEXT_ESCAPED, RAW_TEXT_DOUBLE_ESCAPED } RawT
 
 static bool scan_raw_less_than(TSLexer *lexer, bool script, RawTextMode *mode);
 
+// code-gauge-allow functionCognitiveComplexity 19 -- The script escape states share one linear scan; extracting branches would only move their state transitions.
 static bool scan_raw_text(Scanner *scanner, TSLexer *lexer) {
-    if (scanner->tags.size == 0) {
+    if (scanner->current == 0) {
         return false;
     }
 
@@ -634,7 +503,19 @@ static bool is_html_whitespace(int32_t character) {
 static bool scan_foreign_breakout(const Scanner *scanner, TSLexer *lexer, const Tag *tag, bool closing);
 static bool tag_starts_foreign_breakout(const Tag *tag, TSLexer *lexer);
 
+// code-gauge-allow functionCognitiveComplexity 28 -- One lookahead decides optional ends, raw-text recovery and foreign-content boundaries; extracting branches only relocates these decisions.
+// code-gauge-allow functionNcss 47 -- These decisions share the scanned next tag and its ownership.
 static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
+    TSLexerPosition position;
+    lexer->get_position(lexer, &position);
+    if (lexer->lookahead == '/' && scanner->current && scanner->closing_target &&
+        scanner->closing_position == position.bytes && scanner->current == scanner->closing_next &&
+        scanner->current != scanner->closing_target) {
+        pop_tag(scanner);
+        scanner->closing_next = scanner->current;
+        lexer->result_symbol = IMPLICIT_END_TAG;
+        return true;
+    }
     Tag *parent = top_tag(scanner);
 
     if (parent && parent->type == STYLE && lexer->eof(lexer)) {
@@ -661,41 +542,32 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
         return true;
     }
 
+    bool implicit = false;
     if (is_closing_tag) {
         if (parent && tag_eq(parent, &next_tag)) {
-            bool close_raw = (parent->type == SCRIPT || parent->type == STYLE) &&
-                             !accepts_tag_suffix(lexer, true, NULL);
-            tag_free(&next_tag);
-            if (close_raw) {
-                pop_tag(scanner);
-                lexer->result_symbol = IMPLICIT_END_TAG;
-            }
-            return close_raw;
-        }
-
-        for (unsigned i = scanner->tags.size; i > 0; i--) {
-            if (tag_eq(&scanner->tags.contents[i - 1].tag, &next_tag)) {
-                pop_tag(scanner);
-                lexer->result_symbol = IMPLICIT_END_TAG;
-                tag_free(&next_tag);
-                return true;
+            implicit = (parent->type == SCRIPT || parent->type == STYLE) && !accepts_tag_suffix(lexer, true, NULL);
+        } else {
+            implicit = has_open_tag(scanner, &next_tag);
+            if (implicit) {
+                uint32_t target = scanner->current;
+                while (!tag_eq(&scanner->frames.contents[target - 1].tag, &next_tag)) {
+                    target = scanner->frames.contents[target - 1].parent;
+                }
+                scanner->closing_position = position.bytes;
+                scanner->closing_next = scanner->frames.contents[scanner->current - 1].parent;
+                scanner->closing_target = target;
             }
         }
-    } else if (
-        parent &&
-        (
-            !tag_can_contain(parent, &next_tag) ||
-            ((parent->type == HTML || parent->type == HEAD || parent->type == BODY) && lexer->eof(lexer))
-        )
-    ) {
+    } else if (parent) {
+        bool document_boundary = (parent->type == HTML || parent->type == HEAD || parent->type == BODY) && lexer->eof(lexer);
+        implicit = !tag_can_contain(parent, &next_tag) || document_boundary;
+    }
+    tag_free(&next_tag);
+    if (implicit) {
         pop_tag(scanner);
         lexer->result_symbol = IMPLICIT_END_TAG;
-        tag_free(&next_tag);
-        return true;
     }
-
-    tag_free(&next_tag);
-    return false;
+    return implicit;
 }
 
 static bool scan_foreign_breakout(const Scanner *scanner, TSLexer *lexer, const Tag *tag, bool closing) {
@@ -744,7 +616,7 @@ static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
         return true;
     }
 
-    push_tags(scanner, tag, 1);
+    push_tag(scanner, tag);
     bool html = in_html_namespace(scanner);
     bool raw = !self_closing || html;
     if (tag_is_void(&tag) && html) {
@@ -800,7 +672,7 @@ static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer, bool valid_end_t
     }
 
     Tag tag = tag_for_name(tag_name);
-    if (valid_end_tag && scanner->tags.size > 0 && tag_eq(top_tag(scanner), &tag)) {
+    if (valid_end_tag && scanner->current > 0 && tag_eq(top_tag(scanner), &tag)) {
         pop_tag(scanner);
         lexer->result_symbol = END_TAG_NAME;
     } else {
@@ -871,6 +743,7 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     return scan_tag_syntax(scanner, lexer, valid_symbols);
 }
 
+// code-gauge-allow functionCognitiveComplexity 18 -- Dispatch depends on the lexer state and external token validity; separating cases would only move the branches.
 static bool scan_tag_syntax(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     bool valid_start_tag = accepts_start_tag(valid_symbols);
     bool valid_tag_name = valid_start_tag || valid_symbols[END_TAG_NAME] ||
@@ -957,6 +830,8 @@ static void advance_tag_suffix(TSLexer *lexer, String *suffix);
 
 // This lookahead consumes input: callers must mark the token end first.
 // The implicit-end path inherits that boundary from scan_markup_open.
+// code-gauge-allow functionCognitiveComplexity 23 -- Quote, separator and value states share one lookahead scan; extracting transitions would only relocate the state machine.
+// code-gauge-allow functionNcss 41 -- The suffix states jointly determine whether later markup belongs to this tag.
 static bool accepts_tag_suffix(TSLexer *lexer, bool closing, String *suffix) {
     bool has_attribute_separator = iswspace(lexer->lookahead);
     while (iswspace(lexer->lookahead)) {
@@ -1033,7 +908,10 @@ void tree_sitter_html_external_scanner_deserialize(void *payload, const char *bu
 
 void tree_sitter_html_external_scanner_destroy(void *payload) {
     Scanner *scanner = (Scanner *)payload;
-    clear_tags(scanner);
-    array_delete(&scanner->tags);
+    for (unsigned i = 0; i < scanner->frames.size; i++) {
+        tag_free(&scanner->frames.contents[i].tag);
+    }
+    array_delete(&scanner->frames);
+    array_delete(&scanner->names);
     ts_free(scanner);
 }
