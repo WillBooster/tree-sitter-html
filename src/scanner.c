@@ -1,4 +1,4 @@
-// code-gauge-allow-file fileNcss 553 -- The external scanner state machines form one cohesive module; splitting unrelated routines would only relocate this size.
+// code-gauge-allow-file fileNcss 557 -- The external scanner state machines form one cohesive module; splitting unrelated routines would only relocate this size.
 #include "tag.h"
 #include "tree_sitter/parser.h"
 #include "attributeEntity.h"
@@ -33,6 +33,7 @@ typedef enum { NAMESPACE_HTML, NAMESPACE_SVG, NAMESPACE_MATH, NAMESPACE_MATH_ANN
 typedef struct {
     Tag tag;
     uint32_t parent;
+    uint32_t previous_distinct;
     Namespace namespace;
     Namespace child_namespace;
 } TagFrame;
@@ -63,7 +64,11 @@ static void push_tag(Scanner *scanner, Tag tag) {
     Namespace parent = scanner->current == 0 ? NAMESPACE_HTML
         : scanner->frames.contents[scanner->current - 1].child_namespace;
     Namespace current = tag_namespace(parent, &tag);
-    TagFrame frame = {tag, scanner->current, current, child_namespace(current, &tag)};
+    uint32_t previous_distinct = scanner->current;
+    if (previous_distinct && tag_eq(top_tag(scanner), &tag)) {
+        previous_distinct = scanner->frames.contents[previous_distinct - 1].previous_distinct;
+    }
+    TagFrame frame = {tag, scanner->current, previous_distinct, current, child_namespace(current, &tag)};
     array_push(&scanner->frames, frame);
     scanner->current = scanner->frames.size;
 }
@@ -445,7 +450,7 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
         if (parent && tag_eq(parent, &next_tag)) {
             implicit = (parent->type == SCRIPT || parent->type == STYLE) && !accepts_tag_suffix(lexer, true, NULL);
         } else {
-            for (uint32_t i = scanner->current; i > 0; i = scanner->frames.contents[i - 1].parent) {
+            for (uint32_t i = scanner->current; i > 0; i = scanner->frames.contents[i - 1].previous_distinct) {
                 if (tag_eq(&scanner->frames.contents[i - 1].tag, &next_tag)) {
                     implicit = true;
                     break;

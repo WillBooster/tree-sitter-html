@@ -34,11 +34,12 @@ test('uses a Wasm build built from the current parser', () => {
 // background threads, which compile the Wasm build and collect garbage during the parses. 2,000 and 20,000 lines are
 // measured after warm-up parses and in alternation, each keeping its fastest run; their ratio is about 10 locally, and
 // 18 leaves a margin over that while failing for growth faster than about n^1.25.
-// Each line is a start tag broken off in an attribute. The scanner keeps a stack of the open elements and walks
-// it for implicit end tags, so lines that each leave an element open (e.g. `<b></i>`) take time that grows faster than
-// the input, with upstream's parser as well.
 test('recovers from an error on each line in linear time', { timeout: 60_000 }, () => {
   expectLinearParseTime('<p a=\n'.repeat(2000), '<p a=\n'.repeat(20_000), true);
+});
+
+test('skips repeated open names when recovering unmatched end tags in linear time', { timeout: 60_000 }, () => {
+  expectLinearParseTime('<b></i>'.repeat(2000), '<b></i>'.repeat(20_000), true);
 });
 
 test('parses deeply nested repeated and alternating tags in linear time', { timeout: 60_000 }, () => {
