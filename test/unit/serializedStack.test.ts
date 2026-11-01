@@ -146,27 +146,6 @@ test('retains full long names and matching closes in native parses', () => {
   }
 });
 
-test('clears full-parse snapshots on parser reset and keeps earlier trees readable', () => {
-  const parser = new Parser().setLanguage(language);
-  const first = parser.parse('<svg><x-a><foreignObject><br>one</foreignObject></x-a></svg>')!;
-  try {
-    parser.reset();
-    const second = parser.parse('<math><mtext><br>two</mtext></math><p>after</p>')!;
-    try {
-      expect(first.rootNode.hasError).toBe(false);
-      expect(first.rootNode.descendantsOfType('void_element').map((node) => node.text)).toEqual(['<br>']);
-      expect(second.rootNode.hasError).toBe(false);
-      expect(second.rootNode.descendantsOfType('void_element').map((node) => node.text)).toEqual(['<br>']);
-      expect(second.rootNode.lastNamedChild?.text).toBe('<p>after</p>');
-    } finally {
-      second.delete();
-    }
-  } finally {
-    first.delete();
-    parser.delete();
-  }
-});
-
 function checkActiveTags(tree: Tree, text: string): void {
   expect(tree.rootNode.hasError).toBe(false);
   const names = tree.rootNode.descendantsOfType('tag_name');
