@@ -471,20 +471,6 @@ static const TSSymbol ts_alias_sequences[6] = {
   [2] = alias_sym_attribute_value,
 };
 
-static const uint16_t ts_non_terminal_alias_map[] = {
-  aux_sym_singlequoted_attribute_value_repeat1, 2,
-    aux_sym_singlequoted_attribute_value_repeat1,
-    alias_sym_attribute_value,
-  aux_sym_doublequoted_attribute_value_repeat1, 2,
-    aux_sym_doublequoted_attribute_value_repeat1,
-    alias_sym_attribute_value,
-  0,
-};
-
-static const uint8_t ts_primary_state_bitmap[] = {
-  255, 141, 118, 252, 255, 95, 56, 254, 255, 119, 239, 0, 204, 108, 0, 
-};
-
 #define TS_LEX_REPEAT(skip_value, label)             \
   {                                                \
     lexer->advance(lexer, skip_value);               \
@@ -1834,7 +1820,6 @@ TS_PUBLIC const TSLanguage *tree_sitter_html(void) {
     .symbol_names = ts_symbol_names,
     .symbol_metadata = ts_symbol_metadata,
     .public_symbol_map = ts_symbol_map,
-    .alias_map = ts_non_terminal_alias_map,
     .alias_sequences = ts_alias_sequences,
     .alias_sequence_offsets = ts_alias_sequence_offsets,
     .alias_sequence_count = 6,
@@ -1851,7 +1836,6 @@ TS_PUBLIC const TSLanguage *tree_sitter_html(void) {
       tree_sitter_html_external_scanner_serialize,
       tree_sitter_html_external_scanner_deserialize,
     },
-    .primary_state_bitmap = ts_primary_state_bitmap,
     .name = "html",
     .max_reserved_word_set_size = 0,
     .metadata = {

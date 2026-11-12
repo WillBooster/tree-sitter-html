@@ -1,6 +1,13 @@
+#ifndef TREE_SITTER_HTML_TAG_H_
+#define TREE_SITTER_HTML_TAG_H_
+
 #include "tree_sitter/array.h"
+#include "tree_sitter/parser.h"
 
 #include <string.h>
+#include <wctype.h>
+
+#define TAG_NAME_MAX_LENGTH 14
 
 typedef enum {
     AREA,
@@ -141,8 +148,9 @@ typedef enum {
 typedef Array(char) String;
 
 typedef struct {
-    char tag_name[16];
-    TagType tag_type;
+    char tag_name[TAG_NAME_MAX_LENGTH + 1];
+    uint8_t name_length;
+    uint8_t tag_type;
 } TagMapEntry;
 
 typedef struct {
@@ -150,172 +158,251 @@ typedef struct {
     String custom_tag_name;
 } Tag;
 
+#define TAG_MAP_ENTRY(name, type) {name, sizeof(name) - 1, type}
+
 static const TagMapEntry TAG_TYPES_BY_TAG_NAME[] = {
-    {"ANNOTATION-XML", ANNOTATION_XML},
-    {"AREA",       AREA      },
-    {"BASE",       BASE      },
-    {"BASEFONT",   BASEFONT  },
-    {"BGSOUND",    BGSOUND   },
-    {"BR",         BR        },
-    {"COL",        COL       },
-    {"COMMAND",    COMMAND   },
-    {"EMBED",      EMBED     },
-    {"FRAME",      FRAME     },
-    {"HR",         HR        },
-    {"IMAGE",      IMAGE     },
-    {"IMG",        IMG       },
-    {"INPUT",      INPUT     },
-    {"ISINDEX",    ISINDEX   },
-    {"KEYGEN",     KEYGEN    },
-    {"LINK",       LINK      },
-    {"MENUITEM",   MENUITEM  },
-    {"META",       META      },
-    {"NEXTID",     NEXTID    },
-    {"PARAM",      PARAM     },
-    {"SOURCE",     SOURCE    },
-    {"TRACK",      TRACK     },
-    {"WBR",        WBR       },
-    {"A",          A         },
-    {"ABBR",       ABBR      },
-    {"ADDRESS",    ADDRESS   },
-    {"ARTICLE",    ARTICLE   },
-    {"ASIDE",      ASIDE     },
-    {"AUDIO",      AUDIO     },
-    {"B",          B         },
-    {"BDI",        BDI       },
-    {"BDO",        BDO       },
-    {"BLOCKQUOTE", BLOCKQUOTE},
-    {"BODY",       BODY      },
-    {"BUTTON",     BUTTON    },
-    {"CANVAS",     CANVAS    },
-    {"CAPTION",    CAPTION   },
-    {"CITE",       CITE      },
-    {"CODE",       CODE      },
-    {"COLGROUP",   COLGROUP  },
-    {"DATA",       DATA      },
-    {"DATALIST",   DATALIST  },
-    {"DD",         DD        },
-    {"DEL",        DEL       },
-    {"DETAILS",    DETAILS   },
-    {"DFN",        DFN       },
-    {"DIALOG",     DIALOG    },
-    {"DIV",        DIV       },
-    {"DL",         DL        },
-    {"DT",         DT        },
-    {"EM",         EM        },
-    {"FIELDSET",   FIELDSET  },
-    {"FIGCAPTION", FIGCAPTION},
-    {"FIGURE",     FIGURE    },
-    {"FOOTER",     FOOTER    },
-    {"FORM",       FORM      },
-    {"H1",         H1        },
-    {"H2",         H2        },
-    {"H3",         H3        },
-    {"H4",         H4        },
-    {"H5",         H5        },
-    {"H6",         H6        },
-    {"HEAD",       HEAD      },
-    {"HEADER",     HEADER    },
-    {"HGROUP",     HGROUP    },
-    {"HTML",       HTML      },
-    {"I",          I         },
-    {"IFRAME",     IFRAME    },
-    {"INS",        INS       },
-    {"KBD",        KBD       },
-    {"LABEL",      LABEL     },
-    {"LEGEND",     LEGEND    },
-    {"LI",         LI        },
-    {"MAIN",       MAIN      },
-    {"MAP",        MAP       },
-    {"MARK",       MARK      },
-    {"MATH",       MATH      },
-    {"MENU",       MENU      },
-    {"METER",      METER     },
-    {"NAV",        NAV       },
-    {"NOSCRIPT",   NOSCRIPT  },
-    {"OBJECT",     OBJECT    },
-    {"OL",         OL        },
-    {"OPTGROUP",   OPTGROUP  },
-    {"OPTION",     OPTION    },
-    {"OUTPUT",     OUTPUT    },
-    {"P",          P         },
-    {"PICTURE",    PICTURE   },
-    {"PRE",        PRE       },
-    {"PROGRESS",   PROGRESS  },
-    {"Q",          Q         },
-    {"RB",         RB        },
-    {"RP",         RP        },
-    {"RT",         RT        },
-    {"RTC",        RTC       },
-    {"RUBY",       RUBY      },
-    {"S",          S         },
-    {"SAMP",       SAMP      },
-    {"SCRIPT",     SCRIPT    },
-    {"SECTION",    SECTION   },
-    {"SELECT",     SELECT    },
-    {"SLOT",       SLOT      },
-    {"SMALL",      SMALL     },
-    {"SPAN",       SPAN      },
-    {"STRONG",     STRONG    },
-    {"STYLE",      STYLE     },
-    {"SUB",        SUB       },
-    {"SUMMARY",    SUMMARY   },
-    {"SUP",        SUP       },
-    {"SVG",        SVG       },
-    {"TABLE",      TABLE     },
-    {"TBODY",      TBODY     },
-    {"TD",         TD        },
-    {"TEMPLATE",   TEMPLATE  },
-    {"TEXTAREA",   TEXTAREA  },
-    {"TFOOT",      TFOOT     },
-    {"TH",         TH        },
-    {"THEAD",      THEAD     },
-    {"TIME",       TIME      },
-    {"TITLE",      TITLE     },
-    {"TR",         TR        },
-    {"U",          U         },
-    {"UL",         UL        },
-    {"VAR",        VAR       },
-    {"VIDEO",      VIDEO     },
-    {"CUSTOM",     CUSTOM    },
+    TAG_MAP_ENTRY("A", A),
+    TAG_MAP_ENTRY("ABBR", ABBR),
+    TAG_MAP_ENTRY("ADDRESS", ADDRESS),
+    TAG_MAP_ENTRY("ANNOTATION-XML", ANNOTATION_XML),
+    TAG_MAP_ENTRY("AREA", AREA),
+    TAG_MAP_ENTRY("ARTICLE", ARTICLE),
+    TAG_MAP_ENTRY("ASIDE", ASIDE),
+    TAG_MAP_ENTRY("AUDIO", AUDIO),
+    TAG_MAP_ENTRY("B", B),
+    TAG_MAP_ENTRY("BASE", BASE),
+    TAG_MAP_ENTRY("BASEFONT", BASEFONT),
+    TAG_MAP_ENTRY("BDI", BDI),
+    TAG_MAP_ENTRY("BDO", BDO),
+    TAG_MAP_ENTRY("BGSOUND", BGSOUND),
+    TAG_MAP_ENTRY("BLOCKQUOTE", BLOCKQUOTE),
+    TAG_MAP_ENTRY("BODY", BODY),
+    TAG_MAP_ENTRY("BR", BR),
+    TAG_MAP_ENTRY("BUTTON", BUTTON),
+    TAG_MAP_ENTRY("CANVAS", CANVAS),
+    TAG_MAP_ENTRY("CAPTION", CAPTION),
+    TAG_MAP_ENTRY("CITE", CITE),
+    TAG_MAP_ENTRY("CODE", CODE),
+    TAG_MAP_ENTRY("COL", COL),
+    TAG_MAP_ENTRY("COLGROUP", COLGROUP),
+    TAG_MAP_ENTRY("COMMAND", COMMAND),
+    TAG_MAP_ENTRY("DATA", DATA),
+    TAG_MAP_ENTRY("DATALIST", DATALIST),
+    TAG_MAP_ENTRY("DD", DD),
+    TAG_MAP_ENTRY("DEL", DEL),
+    TAG_MAP_ENTRY("DETAILS", DETAILS),
+    TAG_MAP_ENTRY("DFN", DFN),
+    TAG_MAP_ENTRY("DIALOG", DIALOG),
+    TAG_MAP_ENTRY("DIV", DIV),
+    TAG_MAP_ENTRY("DL", DL),
+    TAG_MAP_ENTRY("DT", DT),
+    TAG_MAP_ENTRY("EM", EM),
+    TAG_MAP_ENTRY("EMBED", EMBED),
+    TAG_MAP_ENTRY("FIELDSET", FIELDSET),
+    TAG_MAP_ENTRY("FIGCAPTION", FIGCAPTION),
+    TAG_MAP_ENTRY("FIGURE", FIGURE),
+    TAG_MAP_ENTRY("FOOTER", FOOTER),
+    TAG_MAP_ENTRY("FORM", FORM),
+    TAG_MAP_ENTRY("FRAME", FRAME),
+    TAG_MAP_ENTRY("H1", H1),
+    TAG_MAP_ENTRY("H2", H2),
+    TAG_MAP_ENTRY("H3", H3),
+    TAG_MAP_ENTRY("H4", H4),
+    TAG_MAP_ENTRY("H5", H5),
+    TAG_MAP_ENTRY("H6", H6),
+    TAG_MAP_ENTRY("HEAD", HEAD),
+    TAG_MAP_ENTRY("HEADER", HEADER),
+    TAG_MAP_ENTRY("HGROUP", HGROUP),
+    TAG_MAP_ENTRY("HR", HR),
+    TAG_MAP_ENTRY("HTML", HTML),
+    TAG_MAP_ENTRY("I", I),
+    TAG_MAP_ENTRY("IFRAME", IFRAME),
+    TAG_MAP_ENTRY("IMAGE", IMAGE),
+    TAG_MAP_ENTRY("IMG", IMG),
+    TAG_MAP_ENTRY("INPUT", INPUT),
+    TAG_MAP_ENTRY("INS", INS),
+    TAG_MAP_ENTRY("ISINDEX", ISINDEX),
+    TAG_MAP_ENTRY("KBD", KBD),
+    TAG_MAP_ENTRY("KEYGEN", KEYGEN),
+    TAG_MAP_ENTRY("LABEL", LABEL),
+    TAG_MAP_ENTRY("LEGEND", LEGEND),
+    TAG_MAP_ENTRY("LI", LI),
+    TAG_MAP_ENTRY("LINK", LINK),
+    TAG_MAP_ENTRY("MAIN", MAIN),
+    TAG_MAP_ENTRY("MAP", MAP),
+    TAG_MAP_ENTRY("MARK", MARK),
+    TAG_MAP_ENTRY("MATH", MATH),
+    TAG_MAP_ENTRY("MENU", MENU),
+    TAG_MAP_ENTRY("MENUITEM", MENUITEM),
+    TAG_MAP_ENTRY("META", META),
+    TAG_MAP_ENTRY("METER", METER),
+    TAG_MAP_ENTRY("NAV", NAV),
+    TAG_MAP_ENTRY("NEXTID", NEXTID),
+    TAG_MAP_ENTRY("NOSCRIPT", NOSCRIPT),
+    TAG_MAP_ENTRY("OBJECT", OBJECT),
+    TAG_MAP_ENTRY("OL", OL),
+    TAG_MAP_ENTRY("OPTGROUP", OPTGROUP),
+    TAG_MAP_ENTRY("OPTION", OPTION),
+    TAG_MAP_ENTRY("OUTPUT", OUTPUT),
+    TAG_MAP_ENTRY("P", P),
+    TAG_MAP_ENTRY("PARAM", PARAM),
+    TAG_MAP_ENTRY("PICTURE", PICTURE),
+    TAG_MAP_ENTRY("PRE", PRE),
+    TAG_MAP_ENTRY("PROGRESS", PROGRESS),
+    TAG_MAP_ENTRY("Q", Q),
+    TAG_MAP_ENTRY("RB", RB),
+    TAG_MAP_ENTRY("RP", RP),
+    TAG_MAP_ENTRY("RT", RT),
+    TAG_MAP_ENTRY("RTC", RTC),
+    TAG_MAP_ENTRY("RUBY", RUBY),
+    TAG_MAP_ENTRY("S", S),
+    TAG_MAP_ENTRY("SAMP", SAMP),
+    TAG_MAP_ENTRY("SCRIPT", SCRIPT),
+    TAG_MAP_ENTRY("SECTION", SECTION),
+    TAG_MAP_ENTRY("SELECT", SELECT),
+    TAG_MAP_ENTRY("SLOT", SLOT),
+    TAG_MAP_ENTRY("SMALL", SMALL),
+    TAG_MAP_ENTRY("SOURCE", SOURCE),
+    TAG_MAP_ENTRY("SPAN", SPAN),
+    TAG_MAP_ENTRY("STRONG", STRONG),
+    TAG_MAP_ENTRY("STYLE", STYLE),
+    TAG_MAP_ENTRY("SUB", SUB),
+    TAG_MAP_ENTRY("SUMMARY", SUMMARY),
+    TAG_MAP_ENTRY("SUP", SUP),
+    TAG_MAP_ENTRY("SVG", SVG),
+    TAG_MAP_ENTRY("TABLE", TABLE),
+    TAG_MAP_ENTRY("TBODY", TBODY),
+    TAG_MAP_ENTRY("TD", TD),
+    TAG_MAP_ENTRY("TEMPLATE", TEMPLATE),
+    TAG_MAP_ENTRY("TEXTAREA", TEXTAREA),
+    TAG_MAP_ENTRY("TFOOT", TFOOT),
+    TAG_MAP_ENTRY("TH", TH),
+    TAG_MAP_ENTRY("THEAD", THEAD),
+    TAG_MAP_ENTRY("TIME", TIME),
+    TAG_MAP_ENTRY("TITLE", TITLE),
+    TAG_MAP_ENTRY("TR", TR),
+    TAG_MAP_ENTRY("TRACK", TRACK),
+    TAG_MAP_ENTRY("U", U),
+    TAG_MAP_ENTRY("UL", UL),
+    TAG_MAP_ENTRY("VAR", VAR),
+    TAG_MAP_ENTRY("VIDEO", VIDEO),
+    TAG_MAP_ENTRY("WBR", WBR),
 };
 
-static const TagType TAG_TYPES_NOT_ALLOWED_IN_PARAGRAPHS[] = {
-    ADDRESS,  ARTICLE,    ASIDE,  BLOCKQUOTE, DETAILS, DIV, DL,
-    FIELDSET, FIGCAPTION, FIGURE, FOOTER,     FORM,    H1,  H2,
-    H3,       H4,         H5,     H6,         HEADER,  HR,  MAIN,
-    NAV,      OL,         P,      PRE,        SECTION,
+#undef TAG_MAP_ENTRY
+
+static const bool TAG_TYPES_DISALLOWED_IN_PARAGRAPHS[END_] = {
+    [ADDRESS] = true,    [ARTICLE] = true, [ASIDE] = true,  [BLOCKQUOTE] = true, [DETAILS] = true,
+    [DIV] = true,        [DL] = true,      [FIELDSET] = true, [FIGCAPTION] = true, [FIGURE] = true,
+    [FOOTER] = true,     [FORM] = true,    [H1] = true,     [H2] = true,         [H3] = true,
+    [H4] = true,         [H5] = true,      [H6] = true,     [HEADER] = true,     [HR] = true,
+    [MAIN] = true,       [NAV] = true,     [OL] = true,     [P] = true,          [PRE] = true,
+    [SECTION] = true,
 };
 
-static TagType tag_type_for_name(const String *tag_name) {
-    for (unsigned i = 0; i < sizeof(TAG_TYPES_BY_TAG_NAME) / sizeof(TAG_TYPES_BY_TAG_NAME[0]); i++) {
-        const TagMapEntry *entry = &TAG_TYPES_BY_TAG_NAME[i];
-        if (
-            strlen(entry->tag_name) == tag_name->size &&
-            memcmp(tag_name->contents, entry->tag_name, tag_name->size) == 0
-        ) {
-            return entry->tag_type;
+static const bool TAG_TYPES_FOREIGN_BREAKOUT[END_] = {
+    [B] = true,          [BLOCKQUOTE] = true, [BODY] = true,  [BR] = true,     [CODE] = true,
+    [DD] = true,         [DIV] = true,        [DL] = true,    [DT] = true,     [EM] = true,
+    [EMBED] = true,      [H1] = true,         [H2] = true,    [H3] = true,     [H4] = true,
+    [H5] = true,         [H6] = true,         [HEAD] = true,  [HR] = true,     [I] = true,
+    [IMG] = true,        [LI] = true,         [MENU] = true,  [META] = true,   [OL] = true,
+    [P] = true,          [PRE] = true,        [RUBY] = true,  [S] = true,      [SMALL] = true,
+    [SPAN] = true,       [STRONG] = true,     [SUB] = true,   [SUP] = true,    [TABLE] = true,
+    [U] = true,          [UL] = true,         [VAR] = true,
+};
+
+static void scan_custom_tag_tail(TSLexer *lexer, String *name, const char *prefix, unsigned length);
+static inline Tag tag_from_slice(const char *contents, unsigned size);
+static TagType tag_type_for_name_slice(const char *contents, unsigned size);
+static int compare_tag_entry(const char *contents, unsigned size, const TagMapEntry *entry);
+static inline bool is_tag_name_char(int32_t character);
+static inline bool is_html_whitespace(int32_t character);
+static inline int32_t ascii_upper(int32_t character);
+static void append_utf8(String *text, uint32_t character);
+static bool slice_eq(const char *contents, unsigned size, const char *expected, unsigned expected_size);
+
+static inline bool at_eof(const TSLexer *lexer) {
+    return lexer->lookahead == 0 && lexer->eof(lexer);
+}
+
+static inline bool is_unicode_whitespace(int32_t c) {
+    return c >= 0 && (c < 0x80 ? (c == ' ' || (uint32_t)(c - '\t') < 5) : iswspace((wint_t)c) != 0);
+}
+
+#define SLICE_EQ_LITERAL(contents, size, literal) \
+    slice_eq((contents), (size), (literal), sizeof(literal) - 1)
+
+#define TAG_CUSTOM_EQ(tag, literal) \
+    SLICE_EQ_LITERAL((tag)->custom_tag_name.contents, (tag)->custom_tag_name.size, (literal))
+
+static bool scan_tag(TSLexer *lexer, Tag *tag) {
+    *tag = (Tag){.type = CUSTOM, .custom_tag_name = array_new()};
+    int32_t first = ascii_upper(lexer->lookahead);
+    if (first < 'A' || first > 'Z') return false;
+    char buffer[32];
+    unsigned length = 0;
+    while (is_tag_name_char(lexer->lookahead)) {
+        int32_t character = ascii_upper(lexer->lookahead);
+        if (character < 0x80 && length < sizeof(buffer)) {
+            buffer[length++] = (char)character;
+            lexer->advance(lexer, false);
+            continue;
+        }
+        scan_custom_tag_tail(lexer, &tag->custom_tag_name, buffer, length);
+        return true;
+    }
+    *tag = tag_from_slice(buffer, length);
+    return true;
+}
+
+static void scan_custom_tag_tail(TSLexer *lexer, String *name, const char *prefix, unsigned length) {
+    array_reserve(name, length + 16);
+    if (length > 0) {
+        memcpy(name->contents, prefix, length);
+        name->size = length;
+    }
+    do {
+        append_utf8(name, ascii_upper(lexer->lookahead));
+        lexer->advance(lexer, false);
+    } while (is_tag_name_char(lexer->lookahead));
+}
+
+static inline Tag tag_from_slice(const char *contents, unsigned size) {
+    Tag tag = {.type = tag_type_for_name_slice(contents, size), .custom_tag_name = array_new()};
+    if (tag.type == CUSTOM && size > 0) {
+        array_reserve(&tag.custom_tag_name, size);
+        memcpy(tag.custom_tag_name.contents, contents, size);
+        tag.custom_tag_name.size = size;
+    }
+    return tag;
+}
+
+static TagType tag_type_for_name_slice(const char *contents, unsigned size) {
+    if (size == 0 || size > TAG_NAME_MAX_LENGTH) return CUSTOM;
+    unsigned low = 0;
+    unsigned high = sizeof(TAG_TYPES_BY_TAG_NAME) / sizeof(TAG_TYPES_BY_TAG_NAME[0]);
+    while (low < high) {
+        unsigned middle = low + (high - low) / 2;
+        const TagMapEntry *entry = &TAG_TYPES_BY_TAG_NAME[middle];
+        int order = compare_tag_entry(contents, size, entry);
+        if (order < 0) {
+            high = middle;
+        } else if (order > 0) {
+            low = middle + 1;
+        } else {
+            return (TagType)entry->tag_type;
         }
     }
     return CUSTOM;
 }
 
-static inline Tag tag_new() {
-    Tag tag;
-    tag.type = END_;
-    tag.custom_tag_name = (String) array_new();
-    return tag;
-}
-
-static inline Tag tag_for_name(String name) {
-    Tag tag = tag_new();
-    tag.type = tag_type_for_name(&name);
-    if (tag.type == CUSTOM) {
-        tag.custom_tag_name = name;
-    } else {
-        array_delete(&name);
+static int compare_tag_entry(const char *contents, unsigned size, const TagMapEntry *entry) {
+    unsigned min_length = size < entry->name_length ? size : entry->name_length;
+    for (unsigned i = 0; i < min_length; i++) {
+        int diff = (uint8_t)contents[i] - (uint8_t)entry->tag_name[i];
+        if (diff != 0) return diff;
     }
-    return tag;
+    return (int)size - (int)entry->name_length;
 }
 
 static inline void tag_free(Tag *tag) {
@@ -333,16 +420,20 @@ static inline bool tag_eq(const Tag *self, const Tag *other) {
     TagType other_type = other->type == ANNOTATION_XML_HTML ? ANNOTATION_XML : other->type;
     if (self_type != other_type) return false;
     if (self->type == CUSTOM) {
-        if (self->custom_tag_name.size != other->custom_tag_name.size) {
-            return false;
-        }
-        if (memcmp(
+        return slice_eq(
             self->custom_tag_name.contents,
+            self->custom_tag_name.size,
             other->custom_tag_name.contents,
-            self->custom_tag_name.size
-        ) != 0) {
-            return false;
-        }
+            other->custom_tag_name.size
+        );
+    }
+    return true;
+}
+
+static bool slice_eq(const char *contents, unsigned size, const char *expected, unsigned expected_size) {
+    if (size != expected_size) return false;
+    for (unsigned i = 0; i < size; i++) {
+        if (contents[i] != expected[i]) return false;
     }
     return true;
 }
@@ -359,12 +450,7 @@ static bool tag_can_contain(Tag *self, const Tag *other) {
             return child != DT && child != DD;
 
         case P:
-            for (int i = 0; i < 26; i++) {
-                if (child == TAG_TYPES_NOT_ALLOWED_IN_PARAGRAPHS[i]) {
-                    return false;
-                }
-            }
-            return true;
+            return !TAG_TYPES_DISALLOWED_IN_PARAGRAPHS[child];
 
         case COLGROUP:
             return child == COL;
@@ -388,3 +474,48 @@ static bool tag_can_contain(Tag *self, const Tag *other) {
             return true;
     }
 }
+
+static inline const char *tag_raw_end_name(const Tag *tag, unsigned *length) {
+    if (tag->type == TEXTAREA) {
+        *length = 8;
+        return "TEXTAREA";
+    }
+    if (tag->type == TITLE) {
+        *length = 5;
+        return "TITLE";
+    }
+    if (tag->type == IFRAME) {
+        *length = 6;
+        return "IFRAME";
+    }
+    *length = tag->custom_tag_name.size;
+    return tag->custom_tag_name.contents;
+}
+
+static inline bool is_tag_name_char(int32_t character) {
+    return character != 0 && !is_html_whitespace(character) && character != '/' && character != '>';
+}
+
+static inline bool is_html_whitespace(int32_t character) {
+    return character == ' ' || character == '\t' || character == '\n' || character == '\r' || character == '\f';
+}
+
+static inline int32_t ascii_upper(int32_t character) {
+    return character >= 'a' && character <= 'z' ? character - 'a' + 'A' : character;
+}
+
+static void append_utf8(String *text, uint32_t character) {
+    if (character < 0x80) {
+        array_push(text, character);
+        return;
+    }
+    unsigned continuation_count = character < 0x800 ? 1 : character < 0x10000 ? 2 : 3;
+    uint8_t prefix = continuation_count == 1 ? 0xC0 : continuation_count == 2 ? 0xE0 : 0xF0;
+    array_push(text, prefix | (character >> (6 * continuation_count)));
+    while (continuation_count) {
+        continuation_count--;
+        array_push(text, 0x80 | ((character >> (6 * continuation_count)) & 0x3F));
+    }
+}
+
+#endif

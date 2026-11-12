@@ -4,8 +4,6 @@
 #include "attributeEntity.h"
 #include "tagAttributes.h"
 
-#include <wctype.h>
-
 enum TokenType {
     START_TAG_NAME,
     SCRIPT_START_TAG_NAME,
@@ -179,36 +177,6 @@ static unsigned hash_bit(uint64_t hash, uint8_t bit) {
     return (hash >> bit) & 1;
 }
 
-static inline int32_t ascii_upper(int32_t character);
-static void append_utf8(String *text, uint32_t character);
-static bool is_html_whitespace(int32_t character);
-
-static String scan_tag_name(TSLexer *lexer) {
-    String tag_name = array_new();
-    int32_t first = ascii_upper(lexer->lookahead);
-    if (first < 'A' || first > 'Z') return tag_name;
-    while (!lexer->eof(lexer) && lexer->lookahead != 0 && !is_html_whitespace(lexer->lookahead) &&
-           lexer->lookahead != '/' && lexer->lookahead != '>') {
-        append_utf8(&tag_name, ascii_upper(lexer->lookahead));
-        advance(lexer);
-    }
-    return tag_name;
-}
-
-static void append_utf8(String *text, uint32_t character) {
-    if (character < 0x80) {
-        array_push(text, character);
-        return;
-    }
-    unsigned continuation_count = character < 0x800 ? 1 : character < 0x10000 ? 2 : 3;
-    uint8_t prefix = continuation_count == 1 ? 0xC0 : continuation_count == 2 ? 0xE0 : 0xF0;
-    array_push(text, prefix | (character >> (6 * continuation_count)));
-    while (continuation_count) {
-        continuation_count--;
-        array_push(text, 0x80 | ((character >> (6 * continuation_count)) & 0x3F));
-    }
-}
-
 static bool scan_comment(TSLexer *lexer) {
     if (lexer->lookahead != '-') {
         return false;
@@ -240,10 +208,6 @@ static bool scan_comment(TSLexer *lexer) {
     return false;
 }
 
-static inline int32_t ascii_upper(int32_t character) {
-    return character >= 'a' && character <= 'z' ? character - 'a' + 'A' : character;
-}
-
 static bool is_raw_name_boundary(TSLexer *lexer);
 static bool scan_processing_instruction_target(TSLexer *lexer);
 typedef enum { ELEMENT_TEXT_NONE, ELEMENT_TEXT_RAW, ELEMENT_TEXT_RCDATA, ELEMENT_TEXT_PLAINTEXT } ElementTextMode;
@@ -257,18 +221,18 @@ static bool scan_processing_instruction(TSLexer *lexer, const bool *valid_symbol
         return false;
     }
     advance(lexer);
-    if (lexer->eof(lexer)) {
+    if (at_eof(lexer)) {
         return false;
     }
     bool valid = scan_processing_instruction_target(lexer);
-    while (!lexer->eof(lexer) && lexer->lookahead != '>') {
+    while (!at_eof(lexer) && lexer->lookahead != '>') {
         advance(lexer);
     }
-    enum TokenType result = valid ? (lexer->eof(lexer) ? UNFINISHED_PROCESSING_INSTRUCTION : PROCESSING_INSTRUCTION) : COMMENT;
+    enum TokenType result = valid ? (at_eof(lexer) ? UNFINISHED_PROCESSING_INSTRUCTION : PROCESSING_INSTRUCTION) : COMMENT;
     if (!valid_symbols[result]) {
         return false;
     }
-    if (!lexer->eof(lexer)) {
+    if (!at_eof(lexer)) {
         advance(lexer);
     }
     lexer->mark_end(lexer);
@@ -286,17 +250,10 @@ static ElementTextMode classify_element_text(const Tag *tag) {
     if (tag->type == TEXTAREA || tag->type == TITLE) return ELEMENT_TEXT_RCDATA;
     if (tag->type == IFRAME) return ELEMENT_TEXT_RAW;
     if (tag->type != CUSTOM) return ELEMENT_TEXT_NONE;
-    static const struct { const char *name; ElementTextMode mode; } tags[] = {
-        {"XMP", ELEMENT_TEXT_RAW}, {"NOEMBED", ELEMENT_TEXT_RAW},
-        {"NOFRAMES", ELEMENT_TEXT_RAW}, {"PLAINTEXT", ELEMENT_TEXT_PLAINTEXT},
-    };
-    for (unsigned i = 0; i < sizeof(tags) / sizeof(tags[0]); i++) {
-        size_t length = strlen(tags[i].name);
-        if (tag->custom_tag_name.size == length && memcmp(tag->custom_tag_name.contents, tags[i].name, length) == 0) {
-            return tags[i].mode;
-        }
+    if (TAG_CUSTOM_EQ(tag, "XMP") || TAG_CUSTOM_EQ(tag, "NOEMBED") || TAG_CUSTOM_EQ(tag, "NOFRAMES")) {
+        return ELEMENT_TEXT_RAW;
     }
-    return ELEMENT_TEXT_NONE;
+    return TAG_CUSTOM_EQ(tag, "PLAINTEXT") ? ELEMENT_TEXT_PLAINTEXT : ELEMENT_TEXT_NONE;
 }
 
 static Namespace active_namespace(const Scanner *scanner, bool children);
@@ -323,146 +280,165 @@ static Namespace tag_namespace(Namespace current, const Tag *tag) {
 }
 
 static Namespace child_namespace(Namespace current, const Tag *tag) {
-    if (current == NAMESPACE_MATH && tag->type == ANNOTATION_XML) {
-        return NAMESPACE_MATH_ANNOTATION;
+    if (current == NAMESPACE_MATH && tag->type == ANNOTATION_XML) return NAMESPACE_MATH_ANNOTATION;
+    if (current == NAMESPACE_MATH && tag->type == ANNOTATION_XML_HTML) return NAMESPACE_HTML;
+    if (current == NAMESPACE_SVG && tag->type == TITLE) return NAMESPACE_HTML;
+    if (current == NAMESPACE_HTML || tag->type != CUSTOM) return current;
+    if (current == NAMESPACE_SVG) {
+        return TAG_CUSTOM_EQ(tag, "FOREIGNOBJECT") || TAG_CUSTOM_EQ(tag, "DESC") ? NAMESPACE_HTML : current;
     }
-    if (current == NAMESPACE_MATH && tag->type == ANNOTATION_XML_HTML) {
-        return NAMESPACE_HTML;
-    }
-    if (current == NAMESPACE_SVG && tag->type == TITLE) {
-        return NAMESPACE_HTML;
-    }
-    if (tag->type != CUSTOM) {
-        return current;
-    }
-    static const char *svg_points[] = {"FOREIGNOBJECT", "DESC"};
-    static const char *math_points[] = {"MI", "MO", "MN", "MS", "MTEXT"};
-    const char **points = current == NAMESPACE_SVG ? svg_points : math_points;
-    unsigned count = current == NAMESPACE_SVG ? 2 : 5;
-    for (unsigned i = 0; i < count; i++) {
-        size_t length = strlen(points[i]);
-        if (tag->custom_tag_name.size == length && memcmp(tag->custom_tag_name.contents, points[i], length) == 0) {
-            return NAMESPACE_HTML;
-        }
-    }
-    return current;
+    return TAG_CUSTOM_EQ(tag, "MI") || TAG_CUSTOM_EQ(tag, "MO") || TAG_CUSTOM_EQ(tag, "MN") ||
+                   TAG_CUSTOM_EQ(tag, "MS") || TAG_CUSTOM_EQ(tag, "MTEXT")
+               ? NAMESPACE_HTML
+               : current;
 }
 
 static bool scan_processing_instruction_target(TSLexer *lexer) {
-    char target[16] = {0};
+    char target[15];
     unsigned length = 0;
     int32_t first = ascii_upper(lexer->lookahead);
     bool valid = (first >= 'A' && first <= 'Z') || first == '_';
-    while (!lexer->eof(lexer) && lexer->lookahead != '>' && lexer->lookahead != '?' &&
+    while (!at_eof(lexer) && lexer->lookahead != '>' && lexer->lookahead != '?' &&
            !is_html_whitespace(lexer->lookahead)) {
         int32_t character = ascii_upper(lexer->lookahead);
         valid &= (character >= 'A' && character <= 'Z') ||
                  (character >= '0' && character <= '9') || character == '-' || character == '_';
-        if (length < sizeof(target) - 1) {
+        if (length < sizeof(target)) {
             target[length++] = (char)character;
         }
         advance(lexer);
     }
-    return valid && (lexer->eof(lexer) || (strcmp(target, "XML") != 0 && strcmp(target, "XML-STYLESHEET") != 0));
+    return valid && (at_eof(lexer) ||
+                     (!SLICE_EQ_LITERAL(target, length, "XML") &&
+                      !SLICE_EQ_LITERAL(target, length, "XML-STYLESHEET")));
 }
 
+static inline bool at_element_text_stop(TSLexer *lexer, ElementTextMode mode);
+static void advance_element_text_run(TSLexer *lexer, ElementTextMode mode);
 static bool scan_element_end(TSLexer *lexer, const Tag *tag);
 static bool scan_raw_name(TSLexer *lexer, const char *name, unsigned length);
 
 static bool scan_element_text(Scanner *scanner, TSLexer *lexer, ElementTextMode mode, bool can_end) {
     const Tag *tag = top_tag(scanner);
     bool consumed = false;
-    lexer->mark_end(lexer);
-    while (!lexer->eof(lexer) && !(mode == ELEMENT_TEXT_RCDATA && lexer->lookahead == '&')) {
+    while (!at_element_text_stop(lexer, mode)) {
         if (lexer->lookahead == '<' && mode != ELEMENT_TEXT_PLAINTEXT) {
+            lexer->mark_end(lexer);
             if (scan_element_end(lexer, tag)) {
                 if (!consumed && can_end && !accepts_tag_suffix(lexer, true, NULL)) {
                     pop_tag(scanner);
                     lexer->result_symbol = IMPLICIT_END_TAG;
                     return true;
                 }
-                break;
+                lexer->result_symbol = ELEMENT_TEXT;
+                return consumed;
             }
         } else {
-            advance(lexer);
+            advance_element_text_run(lexer, mode);
         }
         consumed = true;
-        lexer->mark_end(lexer);
     }
-    lexer->result_symbol = ELEMENT_TEXT;
+    if (consumed) {
+        lexer->mark_end(lexer);
+        lexer->result_symbol = ELEMENT_TEXT;
+    }
     return consumed;
+}
+
+static inline bool at_element_text_stop(TSLexer *lexer, ElementTextMode mode) {
+    return (mode == ELEMENT_TEXT_RCDATA && lexer->lookahead == '&') || at_eof(lexer);
+}
+
+static void advance_element_text_run(TSLexer *lexer, ElementTextMode mode) {
+    if (mode == ELEMENT_TEXT_PLAINTEXT) {
+        do {
+            advance(lexer);
+        } while (lexer->lookahead != 0);
+    } else if (mode == ELEMENT_TEXT_RCDATA) {
+        do {
+            advance(lexer);
+        } while (lexer->lookahead != 0 && lexer->lookahead != '<' && lexer->lookahead != '&');
+    } else {
+        do {
+            advance(lexer);
+        } while (lexer->lookahead != 0 && lexer->lookahead != '<');
+    }
 }
 
 static bool scan_element_end(TSLexer *lexer, const Tag *tag) {
     advance(lexer);
     if (lexer->lookahead != '/') return false;
     advance(lexer);
-    const char *name = tag->custom_tag_name.contents;
-    unsigned length = tag->custom_tag_name.size;
-    if (tag->type != CUSTOM) {
-        for (unsigned i = 0; i < sizeof(TAG_TYPES_BY_TAG_NAME) / sizeof(TAG_TYPES_BY_TAG_NAME[0]); i++) {
-            const TagMapEntry *entry = &TAG_TYPES_BY_TAG_NAME[i];
-            if (entry->tag_type == tag->type) {
-                name = entry->tag_name;
-                length = strlen(name);
-                break;
-            }
-        }
-    }
-    return scan_raw_name(lexer, name, length) && (is_raw_name_boundary(lexer) || lexer->eof(lexer));
+    unsigned length = 0;
+    const char *name = tag_raw_end_name(tag, &length);
+    return scan_raw_name(lexer, name, length) && (is_raw_name_boundary(lexer) || at_eof(lexer));
 }
 
 typedef enum { RAW_TEXT_NORMAL, RAW_TEXT_ESCAPED, RAW_TEXT_DOUBLE_ESCAPED } RawTextMode;
 
+static void advance_raw_normal(TSLexer *lexer);
+static unsigned advance_raw_escaped(TSLexer *lexer, RawTextMode *mode, unsigned dashes);
 static bool scan_raw_less_than(TSLexer *lexer, bool script, RawTextMode *mode);
 
-// code-gauge-allow functionCognitiveComplexity 19 -- The script escape states share one linear scan; extracting branches would only move their state transitions.
 static bool scan_raw_text(Scanner *scanner, TSLexer *lexer) {
     if (scanner->current == 0) {
         return false;
     }
 
-    lexer->mark_end(lexer);
     bool script = top_tag(scanner)->type == SCRIPT;
     RawTextMode mode = RAW_TEXT_NORMAL;
     unsigned dashes = 0;
 
-    while (!lexer->eof(lexer)) {
+    while (!at_eof(lexer)) {
         if (lexer->lookahead == '<') {
+            lexer->mark_end(lexer);
             dashes = 0;
             RawTextMode previous_mode = mode;
             if (scan_raw_less_than(lexer, script, &mode)) {
-                break;
+                lexer->result_symbol = RAW_TEXT;
+                return true;
             }
             if (previous_mode == RAW_TEXT_NORMAL && mode == RAW_TEXT_ESCAPED) {
                 dashes = 2;
             }
-            lexer->mark_end(lexer);
             continue;
         }
-        if (mode != RAW_TEXT_NORMAL && lexer->lookahead == '-') {
-            dashes += dashes < 2;
-        } else {
-            if (lexer->lookahead == '>' && dashes == 2) {
-                mode = RAW_TEXT_NORMAL;
-            }
-            dashes = 0;
+        if (mode == RAW_TEXT_NORMAL) {
+            advance_raw_normal(lexer);
+            continue;
         }
-        advance(lexer);
-        lexer->mark_end(lexer);
+        dashes = advance_raw_escaped(lexer, &mode, dashes);
     }
 
+    lexer->mark_end(lexer);
     lexer->result_symbol = RAW_TEXT;
     return true;
+}
+
+static void advance_raw_normal(TSLexer *lexer) {
+    do {
+        advance(lexer);
+    } while (lexer->lookahead != 0 && lexer->lookahead != '<');
+}
+
+static unsigned advance_raw_escaped(TSLexer *lexer, RawTextMode *mode, unsigned dashes) {
+    if (lexer->lookahead == '-') {
+        advance(lexer);
+        return dashes + (dashes < 2);
+    }
+    if (lexer->lookahead == '>' && dashes == 2) {
+        *mode = RAW_TEXT_NORMAL;
+    }
+    advance(lexer);
+    return 0;
 }
 
 static bool scan_raw_less_than(TSLexer *lexer, bool script, RawTextMode *mode) {
     advance(lexer);
     if (lexer->lookahead == '/') {
         advance(lexer);
-        const char *name = script ? "SCRIPT" : "STYLE";
-        if (!scan_raw_name(lexer, name, strlen(name)) ||
-            !(is_raw_name_boundary(lexer) || lexer->eof(lexer))) {
+        bool matched = script ? scan_raw_name(lexer, "SCRIPT", 6) : scan_raw_name(lexer, "STYLE", 5);
+        if (!matched || !(is_raw_name_boundary(lexer) || at_eof(lexer))) {
             return false;
         }
         if (*mode != RAW_TEXT_DOUBLE_ESCAPED) {
@@ -496,10 +472,6 @@ static bool is_raw_name_boundary(TSLexer *lexer) {
     return lexer->lookahead == '>' || lexer->lookahead == '/' || is_html_whitespace(lexer->lookahead);
 }
 
-static bool is_html_whitespace(int32_t character) {
-    return character == ' ' || character == '\t' || character == '\n' || character == '\r' || character == '\f';
-}
-
 static bool scan_foreign_breakout(const Scanner *scanner, TSLexer *lexer, const Tag *tag, bool closing);
 static bool tag_starts_foreign_breakout(const Tag *tag, TSLexer *lexer);
 
@@ -518,7 +490,7 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     }
     Tag *parent = top_tag(scanner);
 
-    if (parent && parent->type == STYLE && lexer->eof(lexer)) {
+    if (parent && parent->type == STYLE && at_eof(lexer)) {
         return false;
     }
 
@@ -528,13 +500,11 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
         advance(lexer);
     }
 
-    String tag_name = scan_tag_name(lexer);
-    if (tag_name.size == 0 && !lexer->eof(lexer)) {
-        array_delete(&tag_name);
+    Tag next_tag;
+    if (!scan_tag(lexer, &next_tag) && !at_eof(lexer)) {
         return false;
     }
 
-    Tag next_tag = tag_for_name(tag_name);
     if (parent && scan_foreign_breakout(scanner, lexer, &next_tag, is_closing_tag)) {
         pop_tag(scanner);
         lexer->result_symbol = IMPLICIT_END_TAG;
@@ -559,7 +529,7 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
             }
         }
     } else if (parent) {
-        bool document_boundary = (parent->type == HTML || parent->type == HEAD || parent->type == BODY) && lexer->eof(lexer);
+        bool document_boundary = (parent->type == HTML || parent->type == HEAD || parent->type == BODY) && at_eof(lexer);
         implicit = !tag_can_contain(parent, &next_tag) || document_boundary;
     }
     tag_free(&next_tag);
@@ -576,21 +546,13 @@ static bool scan_foreign_breakout(const Scanner *scanner, TSLexer *lexer, const 
 }
 
 static bool tag_starts_foreign_breakout(const Tag *tag, TSLexer *lexer) {
-    static const TagType types[] = {
-        B, BLOCKQUOTE, BODY, BR, CODE, DD, DIV, DL, DT, EM, EMBED,
-        H1, H2, H3, H4, H5, H6, HEAD, HR, I, IMG, LI, MENU, META,
-        OL, P, PRE, RUBY, S, SMALL, SPAN, STRONG, SUB, SUP, TABLE, U, UL, VAR,
-    };
-    for (unsigned i = 0; i < sizeof(types) / sizeof(types[0]); i++) {
-        if (tag->type == types[i]) return true;
-    }
+    if (TAG_TYPES_FOREIGN_BREAKOUT[tag->type]) return true;
     if (tag->type != CUSTOM) return false;
-    static const char *names[] = {"BIG", "CENTER", "LISTING", "NOBR", "STRIKE", "TT"};
-    for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
-        if (tag->custom_tag_name.size == strlen(names[i]) &&
-            memcmp(tag->custom_tag_name.contents, names[i], tag->custom_tag_name.size) == 0) return true;
+    if (TAG_CUSTOM_EQ(tag, "BIG") || TAG_CUSTOM_EQ(tag, "CENTER") || TAG_CUSTOM_EQ(tag, "LISTING") ||
+        TAG_CUSTOM_EQ(tag, "NOBR") || TAG_CUSTOM_EQ(tag, "STRIKE") || TAG_CUSTOM_EQ(tag, "TT")) {
+        return true;
     }
-    if (tag->custom_tag_name.size != 4 || memcmp(tag->custom_tag_name.contents, "FONT", 4) != 0) return false;
+    if (!TAG_CUSTOM_EQ(tag, "FONT")) return false;
     String suffix = array_new();
     bool breakout = accepts_tag_suffix(lexer, false, &suffix) && tag_attributes_html_font(&suffix);
     array_delete(&suffix);
@@ -600,14 +562,12 @@ static bool tag_starts_foreign_breakout(const Tag *tag, TSLexer *lexer) {
 static bool scan_start_tag_suffix(TSLexer *lexer, Tag *tag, bool *self_closing);
 
 static bool scan_start_tag_name(Scanner *scanner, TSLexer *lexer) {
-    String tag_name = scan_tag_name(lexer);
-    if (tag_name.size == 0) {
-        array_delete(&tag_name);
+    Tag tag;
+    if (!scan_tag(lexer, &tag)) {
         return false;
     }
 
     lexer->mark_end(lexer);
-    Tag tag = tag_for_name(tag_name);
     bool self_closing = false;
     if (!scan_start_tag_suffix(lexer, &tag, &self_closing)) {
         tag_free(&tag);
@@ -648,30 +608,27 @@ static bool scan_start_tag_suffix(TSLexer *lexer, Tag *tag, bool *self_closing) 
 }
 
 static bool scan_end_tag_name(Scanner *scanner, TSLexer *lexer, bool valid_end_tag) {
-    String tag_name = scan_tag_name(lexer);
-
-    if (tag_name.size == 0) {
-        array_delete(&tag_name);
+    Tag tag;
+    if (!scan_tag(lexer, &tag)) {
         return false;
     }
 
     lexer->mark_end(lexer);
     if (valid_end_tag) {
         if (!accepts_tag_suffix(lexer, true, NULL)) {
-            array_delete(&tag_name);
+            tag_free(&tag);
             return false;
         }
     } else {
-        while (iswspace(lexer->lookahead)) {
+        while (is_unicode_whitespace(lexer->lookahead)) {
             advance(lexer);
         }
         if (lexer->lookahead != '>') {
-            array_delete(&tag_name);
+            tag_free(&tag);
             return false;
         }
     }
 
-    Tag tag = tag_for_name(tag_name);
     if (valid_end_tag && scanner->current > 0 && tag_eq(top_tag(scanner), &tag)) {
         pop_tag(scanner);
         lexer->result_symbol = END_TAG_NAME;
@@ -715,7 +672,7 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
         return true;
     }
 
-    if (valid_symbols[IMPLICIT_END_TAG] && lexer->eof(lexer) &&
+    if (valid_symbols[IMPLICIT_END_TAG] && at_eof(lexer) &&
         top_tag(scanner) && top_tag(scanner)->type == SCRIPT) {
         pop_tag(scanner);
         lexer->result_symbol = IMPLICIT_END_TAG;
@@ -750,7 +707,7 @@ static bool scan_tag_syntax(Scanner *scanner, TSLexer *lexer, const bool *valid_
                           valid_symbols[ERRONEOUS_END_TAG_NAME];
     bool in_tag = valid_tag_name || valid_symbols[SELF_CLOSING_TAG_DELIMITER] ||
                   valid_symbols[UNQUOTED_ATTRIBUTE_ENTITY];
-    if (iswspace(lexer->lookahead) && !in_tag) {
+    if (is_unicode_whitespace(lexer->lookahead) && !in_tag) {
         return false;
     }
 
@@ -801,7 +758,7 @@ static bool scan_markup_open(Scanner *scanner, TSLexer *lexer, const bool *valid
 }
 
 static bool scan_contiguous_attribute_content(TSLexer *lexer, const bool *valid_symbols) {
-    if (accepts_start_tag(valid_symbols) || lexer->eof(lexer)) {
+    if (accepts_start_tag(valid_symbols) || at_eof(lexer)) {
         return false;
     }
     if (valid_symbols[UNQUOTED_ATTRIBUTE_FRAGMENT] && is_unquoted_attribute_content(lexer->lookahead)) {
@@ -814,7 +771,7 @@ static bool scan_contiguous_attribute_content(TSLexer *lexer, const bool *valid_
 static bool scan_unquoted_attribute_fragment(TSLexer *lexer) {
     do {
         advance(lexer);
-    } while (!lexer->eof(lexer) && is_unquoted_attribute_content(lexer->lookahead));
+    } while (!at_eof(lexer) && is_unquoted_attribute_content(lexer->lookahead));
     lexer->mark_end(lexer);
     lexer->result_symbol = UNQUOTED_ATTRIBUTE_FRAGMENT;
     return true;
@@ -833,11 +790,11 @@ static void advance_tag_suffix(TSLexer *lexer, String *suffix);
 // code-gauge-allow functionCognitiveComplexity 23 -- Quote, separator and value states share one lookahead scan; extracting transitions would only relocate the state machine.
 // code-gauge-allow functionNcss 41 -- The suffix states jointly determine whether later markup belongs to this tag.
 static bool accepts_tag_suffix(TSLexer *lexer, bool closing, String *suffix) {
-    bool has_attribute_separator = iswspace(lexer->lookahead);
-    while (iswspace(lexer->lookahead)) {
+    bool has_attribute_separator = is_unicode_whitespace(lexer->lookahead);
+    while (is_unicode_whitespace(lexer->lookahead)) {
         advance_tag_suffix(lexer, suffix);
     }
-    if (closing && (lexer->lookahead == '&' || lexer->eof(lexer))) {
+    if (closing && (lexer->lookahead == '&' || at_eof(lexer))) {
         return true;
     }
     int32_t quote = 0;
@@ -845,7 +802,7 @@ static bool accepts_tag_suffix(TSLexer *lexer, bool closing, String *suffix) {
     bool value_start = false;
     bool attribute_component = false;
     bool unseparated_attribute_syntax = false;
-    while (!lexer->eof(lexer)) {
+    while (!at_eof(lexer)) {
         if (quote) {
             if (lexer->lookahead == quote) {
                 quote = 0;
@@ -862,7 +819,7 @@ static bool accepts_tag_suffix(TSLexer *lexer, bool closing, String *suffix) {
             value_start = true;
             attribute_component = false;
             unseparated_attribute_syntax = !has_attribute_separator;
-        } else if (iswspace(lexer->lookahead)) {
+        } else if (is_unicode_whitespace(lexer->lookahead)) {
             has_attribute_separator = true;
             attribute_component = false;
         } else {

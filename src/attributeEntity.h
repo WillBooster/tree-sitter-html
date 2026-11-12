@@ -4,11 +4,10 @@
 #include "tree_sitter/parser.h"
 #include "entities.h"
 
-#include <string.h>
-
 static bool scan_numeric_attribute_entity(TSLexer *lexer);
 static bool scan_named_attribute_entity(TSLexer *lexer);
 static const HtmlEntityName *find_html_entity(const char *name);
+static int compare_entity_name(const char *left, const char *right);
 static bool html_entity_digit(int32_t character, bool hexadecimal);
 
 static bool scan_attribute_entity(TSLexer *lexer, TSSymbol symbol, TSSymbol ampersand) {
@@ -52,6 +51,9 @@ static bool scan_named_attribute_entity(TSLexer *lexer) {
         name[length++] = (char)lexer->lookahead;
         lexer->advance(lexer, false);
     }
+    if (length == 0) {
+        return false;
+    }
     name[length] = '\0';
     const HtmlEntityName *match = find_html_entity(name);
     return match && (lexer->lookahead == ';' || (match->legacy && lexer->lookahead != '='));
@@ -62,7 +64,7 @@ static const HtmlEntityName *find_html_entity(const char *name) {
     unsigned high = sizeof(HTML_ENTITY_NAMES) / sizeof(HTML_ENTITY_NAMES[0]);
     while (low < high) {
         unsigned middle = low + (high - low) / 2;
-        int order = strcmp(name, HTML_ENTITY_NAMES[middle].name);
+        int order = compare_entity_name(name, HTML_ENTITY_NAMES[middle].name);
         if (order < 0) {
             high = middle;
         } else if (order > 0) {
@@ -72,6 +74,14 @@ static const HtmlEntityName *find_html_entity(const char *name) {
         }
     }
     return NULL;
+}
+
+static int compare_entity_name(const char *left, const char *right) {
+    while (*left && *left == *right) {
+        left++;
+        right++;
+    }
+    return (uint8_t)*left - (uint8_t)*right;
 }
 
 static bool html_entity_digit(int32_t character, bool hexadecimal) {
