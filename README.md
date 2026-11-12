@@ -14,10 +14,10 @@ to its authors and contributors. This is not an official release of that project
 
 This fork is based on upstream's version 0.23.2 grammar and external scanner and generates the parser with the
 [WillBooster/tree-sitter](https://github.com/WillBooster/tree-sitter) generator. The parser carries that fork's own ABI
-number `0x5742000c`, so it loads with the WillBooster runtime, version 17.0.1 or later in the 17.x series
+number `0x5742000c`, so it loads only with the WillBooster runtime
 ([willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter),
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter)); upstream's runtime rejects
-it. Input that contains NUL characters can parse to a different tree than with upstream's 0.23.2 parser, because the
+it. This package targets and is tested with version 19.1.1 or later in the 19.x series. Input that contains NUL characters can parse to a different tree than with upstream's 0.23.2 parser, because the
 lexers that generator emits treat a NUL character as an ordinary character. This grammar also accepts literal `>`
 characters and bare `&` in text nodes, which upstream 0.23.2 rejects. A bare `&` becomes its own `text` node beside
 surrounding text, while character references remain `entity` nodes. Text nodes include leading, trailing, and whitespace-only content, including whitespace between markup and character references. A DOCTYPE declaration exposes its uninterpreted body as a `doctype_value` child, including legacy PUBLIC or SYSTEM identifiers. Processing instructions use source-preserving
@@ -70,7 +70,7 @@ error recovery produces may change; such changes are released as new major versi
 ## Usage
 
 The npm package ships `tree-sitter-html.wasm` for
-[@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter) version 17.0.1 or later in the 17.x series, which runs in Node.js, Bun, browsers, and Cloudflare Workers.
+[@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter) version 19.1.1 or later in the 19.x series, which runs in Node.js, Bun, browsers, and Cloudflare Workers.
 In Node.js and Bun, load the grammar from its path:
 
 ```js
@@ -117,7 +117,7 @@ In Rust, depend on the [crate](https://crates.io/crates/willbooster-tree-sitter-
 fuzzed with:
 
 ```sh
-cargo add willbooster-tree-sitter@17.0.1 --rename tree-sitter
+cargo add willbooster-tree-sitter@19.1.1 --rename tree-sitter
 cargo add willbooster-tree-sitter-html --rename tree-sitter-html
 ```
 

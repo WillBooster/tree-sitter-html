@@ -2,13 +2,15 @@
 #define TREE_SITTER_HTML_TAG_ATTRIBUTES_H_
 
 #include <stdint.h>
-#include <string.h>
 
 static bool tag_attribute_space(char character);
 static char tag_attribute_lower(char character);
-static bool tag_attribute_name(const char *value, unsigned length, const char *expected);
+static bool tag_attribute_name(const char *value, unsigned length, const char *expected, unsigned expected_length);
 static bool tag_attribute_encoding(const char *value, unsigned length);
 static uint32_t tag_attribute_character(const char *value, unsigned length, unsigned *offset);
+
+#define TAG_ATTRIBUTE_NAME_EQ(value, length, expected) \
+    tag_attribute_name((value), (length), (expected), sizeof(expected) - 1)
 
 typedef struct {
     unsigned name;
@@ -27,7 +29,7 @@ static bool tag_attributes_html_encoding(const String *suffix) {
     unsigned offset = 0;
     while (offset < suffix->size) {
         TagAttribute attribute = tag_attribute(suffix, &offset);
-        if (tag_attribute_name(suffix->contents + attribute.name, attribute.name_end - attribute.name, "encoding")) {
+        if (TAG_ATTRIBUTE_NAME_EQ(suffix->contents + attribute.name, attribute.name_end - attribute.name, "encoding")) {
             return tag_attribute_encoding(suffix->contents + attribute.value, attribute.value_end - attribute.value);
         }
     }
@@ -40,8 +42,8 @@ static bool tag_attributes_html_font(const String *suffix) {
         TagAttribute attribute = tag_attribute(suffix, &offset);
         const char *name = suffix->contents + attribute.name;
         unsigned length = attribute.name_end - attribute.name;
-        if (tag_attribute_name(name, length, "color") || tag_attribute_name(name, length, "face") ||
-            tag_attribute_name(name, length, "size")) return true;
+        if (TAG_ATTRIBUTE_NAME_EQ(name, length, "color") || TAG_ATTRIBUTE_NAME_EQ(name, length, "face") ||
+            TAG_ATTRIBUTE_NAME_EQ(name, length, "size")) return true;
     }
     return false;
 }
@@ -93,8 +95,8 @@ static char tag_attribute_lower(char character) {
     return character >= 'A' && character <= 'Z' ? character + ('a' - 'A') : character;
 }
 
-static bool tag_attribute_name(const char *value, unsigned length, const char *expected) {
-    if (strlen(expected) != length) return false;
+static bool tag_attribute_name(const char *value, unsigned length, const char *expected, unsigned expected_length) {
+    if (expected_length != length) return false;
     for (unsigned i = 0; i < length; i++) {
         if (tag_attribute_lower(value[i]) != expected[i]) return false;
     }
@@ -102,7 +104,7 @@ static bool tag_attribute_name(const char *value, unsigned length, const char *e
 }
 
 static bool tag_attribute_encoding(const char *value, unsigned length) {
-    const char *types[] = {"text/html", "application/xhtml+xml"};
+    static const char types[2][22] = {"text/html", "application/xhtml+xml"};
     for (unsigned type = 0; type < 2; type++) {
         unsigned offset = 0;
         unsigned matched = 0;
@@ -123,13 +125,13 @@ static uint32_t tag_attribute_character(const char *value, unsigned length, unsi
         (*offset)++;
         return tag_attribute_numeric_character(value, length, offset);
     }
-    const char *names[] = {"sol;", "plus;"};
-    for (unsigned i = 0; i < 2; i++) {
-        unsigned size = strlen(names[i]);
-        if (length - *offset >= size && memcmp(value + *offset, names[i], size) == 0) {
-            *offset += size;
-            return i == 0 ? '/' : '+';
-        }
+    if (length - *offset >= 4 && slice_eq(value + *offset, 4, "sol;", 4)) {
+        *offset += 4;
+        return '/';
+    }
+    if (length - *offset >= 5 && slice_eq(value + *offset, 5, "plus;", 5)) {
+        *offset += 5;
+        return '+';
     }
     return UINT32_MAX;
 }
@@ -157,5 +159,7 @@ static unsigned tag_attribute_digit(char character) {
     if (character >= 'a' && character <= 'f') return character - 'a' + 10;
     return 16;
 }
+
+#undef TAG_ATTRIBUTE_NAME_EQ
 
 #endif
