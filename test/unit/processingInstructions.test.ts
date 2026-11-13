@@ -261,7 +261,7 @@ test('bounds recovery work for repeated unfinished instructions and parses them 
   const instruction = '<?target '.repeat(5000);
   const source = '<p>before</p>' + instruction;
   let progressChecks = 0;
-  const tree = parser.parse(source, undefined, { progressCallback: () => ++progressChecks > 10 });
+  const tree = parser.parse(source, { progressCallback: () => ++progressChecks > 10 });
   try {
     expect(tree).not.toBeNull();
     expect(tree!.rootNode.hasError).toBe(true);

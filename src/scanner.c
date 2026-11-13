@@ -32,8 +32,8 @@ typedef struct {
     Tag tag;
     uint32_t parent;
     uint32_t names;
-    Namespace namespace;
-    Namespace child_namespace;
+    uint8_t namespace;
+    uint8_t child_namespace;
 } TagFrame;
 
 typedef struct {
@@ -85,7 +85,7 @@ static void pop_tag(Scanner *scanner) {
     scanner->current = scanner->frames.contents[scanner->current - 1].parent;
 }
 
-// The runtime creates a scanner for each full parse and destroys it on reset. Immutable frames keep snapshots
+// The runtime creates a scanner for each parse and destroys it on reset. Immutable frames keep snapshots
 // valid across parse branches without copying or truncating the open tags into the fixed-size serialization buffer.
 static unsigned serialize(Scanner *scanner, char *buffer) {
     memcpy(buffer, &scanner->current, sizeof(scanner->current));
@@ -166,8 +166,10 @@ static uint64_t name_hash(const Tag *tag) {
     unsigned type = tag->type == ANNOTATION_XML_HTML ? ANNOTATION_XML : tag->type;
     uint64_t hash = (UINT64_C(14695981039346656037) ^ type) * UINT64_C(1099511628211);
     if (tag->type == CUSTOM) {
-        for (unsigned i = 0; i < tag->custom_tag_name.size; i++) {
-            hash = (hash ^ (uint8_t)tag->custom_tag_name.contents[i]) * UINT64_C(1099511628211);
+        unsigned size = 0;
+        const char *contents = tag_custom_name(tag, &size);
+        for (unsigned i = 0; i < size; i++) {
+            hash = (hash ^ (uint8_t)contents[i]) * UINT64_C(1099511628211);
         }
     }
     return hash;
@@ -265,7 +267,7 @@ static bool in_html_namespace(const Scanner *scanner) {
 static Namespace active_namespace(const Scanner *scanner, bool children) {
     if (scanner->current == 0) return NAMESPACE_HTML;
     const TagFrame *frame = &scanner->frames.contents[scanner->current - 1];
-    return children ? frame->child_namespace : frame->namespace;
+    return (Namespace)(children ? frame->child_namespace : frame->namespace);
 }
 
 static Namespace tag_namespace(Namespace current, const Tag *tag) {
@@ -472,6 +474,7 @@ static bool is_raw_name_boundary(TSLexer *lexer) {
     return lexer->lookahead == '>' || lexer->lookahead == '/' || is_html_whitespace(lexer->lookahead);
 }
 
+static bool can_implicitly_close(const Scanner *scanner, const TSLexer *lexer);
 static bool scan_foreign_breakout(const Scanner *scanner, TSLexer *lexer, const Tag *tag, bool closing);
 static bool tag_starts_foreign_breakout(const Tag *tag, TSLexer *lexer);
 
@@ -488,11 +491,10 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
         lexer->result_symbol = IMPLICIT_END_TAG;
         return true;
     }
-    Tag *parent = top_tag(scanner);
-
-    if (parent && parent->type == STYLE && at_eof(lexer)) {
+    if (!can_implicitly_close(scanner, lexer)) {
         return false;
     }
+    Tag *parent = top_tag(scanner);
 
     bool is_closing_tag = false;
     if (lexer->lookahead == '/') {
@@ -505,7 +507,7 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
         return false;
     }
 
-    if (parent && scan_foreign_breakout(scanner, lexer, &next_tag, is_closing_tag)) {
+    if (scan_foreign_breakout(scanner, lexer, &next_tag, is_closing_tag)) {
         pop_tag(scanner);
         lexer->result_symbol = IMPLICIT_END_TAG;
         tag_free(&next_tag);
@@ -514,7 +516,7 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
 
     bool implicit = false;
     if (is_closing_tag) {
-        if (parent && tag_eq(parent, &next_tag)) {
+        if (tag_eq(parent, &next_tag)) {
             implicit = (parent->type == SCRIPT || parent->type == STYLE) && !accepts_tag_suffix(lexer, true, NULL);
         } else {
             implicit = has_open_tag(scanner, &next_tag);
@@ -528,7 +530,7 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
                 scanner->closing_target = target;
             }
         }
-    } else if (parent) {
+    } else {
         bool document_boundary = (parent->type == HTML || parent->type == HEAD || parent->type == BODY) && at_eof(lexer);
         implicit = !tag_can_contain(parent, &next_tag) || document_boundary;
     }
@@ -538,6 +540,14 @@ static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
         lexer->result_symbol = IMPLICIT_END_TAG;
     }
     return implicit;
+}
+
+static bool can_implicitly_close(const Scanner *scanner, const TSLexer *lexer) {
+    const Tag *parent = scanner->current == 0 ? NULL : &scanner->frames.contents[scanner->current - 1].tag;
+    if (!parent) return false;
+    if (at_eof(lexer)) return parent->type != STYLE;
+    return lexer->lookahead == '/' || active_namespace(scanner, true) != NAMESPACE_HTML ||
+           TAG_TYPES_IMPLICIT_END_ON_OPEN[parent->type];
 }
 
 static bool scan_foreign_breakout(const Scanner *scanner, TSLexer *lexer, const Tag *tag, bool closing) {

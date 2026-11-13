@@ -147,6 +147,9 @@ typedef enum {
 
 typedef Array(char) String;
 
+#define TAG_INLINE_CAPACITY (sizeof(String) >= 16 ? 22 : 14)
+#define TAG_HEAP_MARKER 0xFF
+
 typedef struct {
     char tag_name[TAG_NAME_MAX_LENGTH + 1];
     uint8_t name_length;
@@ -154,8 +157,12 @@ typedef struct {
 } TagMapEntry;
 
 typedef struct {
-    TagType type;
-    String custom_tag_name;
+    union {
+        char inline_name[TAG_INLINE_CAPACITY];
+        String custom_tag_name;
+    };
+    uint8_t type;
+    uint8_t inline_size;
 } Tag;
 
 #define TAG_MAP_ENTRY(name, type) {name, sizeof(name) - 1, type}
@@ -311,7 +318,14 @@ static const bool TAG_TYPES_FOREIGN_BREAKOUT[END_] = {
     [U] = true,          [UL] = true,         [VAR] = true,
 };
 
-static void scan_custom_tag_tail(TSLexer *lexer, String *name, const char *prefix, unsigned length);
+static const bool TAG_TYPES_IMPLICIT_END_ON_OPEN[END_] = {
+    [BODY] = true, [COLGROUP] = true, [DD] = true,       [DT] = true, [HEAD] = true,
+    [HTML] = true, [LI] = true,       [OPTGROUP] = true, [P] = true,  [RB] = true,
+    [RP] = true,   [RT] = true,       [TD] = true,       [TH] = true, [TR] = true,
+};
+
+static inline const char *tag_custom_name(const Tag *tag, unsigned *size);
+static void scan_custom_tag_tail(TSLexer *lexer, Tag *tag, const char *prefix, unsigned length);
 static inline Tag tag_from_slice(const char *contents, unsigned size);
 static TagType tag_type_for_name_slice(const char *contents, unsigned size);
 static int compare_tag_entry(const char *contents, unsigned size, const TagMapEntry *entry);
@@ -333,10 +347,20 @@ static inline bool is_unicode_whitespace(int32_t c) {
     slice_eq((contents), (size), (literal), sizeof(literal) - 1)
 
 #define TAG_CUSTOM_EQ(tag, literal) \
-    SLICE_EQ_LITERAL((tag)->custom_tag_name.contents, (tag)->custom_tag_name.size, (literal))
+    (sizeof(char[sizeof(literal) - 1 <= TAG_INLINE_CAPACITY ? 1 : -1]) && \
+     SLICE_EQ_LITERAL((tag)->inline_name, (tag)->inline_size, (literal)))
+
+static inline const char *tag_custom_name(const Tag *tag, unsigned *size) {
+    if (tag->inline_size == TAG_HEAP_MARKER) {
+        *size = tag->custom_tag_name.size;
+        return tag->custom_tag_name.contents;
+    }
+    *size = tag->inline_size;
+    return tag->inline_name;
+}
 
 static bool scan_tag(TSLexer *lexer, Tag *tag) {
-    *tag = (Tag){.type = CUSTOM, .custom_tag_name = array_new()};
+    *tag = (Tag){.type = CUSTOM, .inline_size = 0};
     int32_t first = ascii_upper(lexer->lookahead);
     if (first < 'A' || first > 'Z') return false;
     char buffer[32];
@@ -348,14 +372,17 @@ static bool scan_tag(TSLexer *lexer, Tag *tag) {
             lexer->advance(lexer, false);
             continue;
         }
-        scan_custom_tag_tail(lexer, &tag->custom_tag_name, buffer, length);
+        scan_custom_tag_tail(lexer, tag, buffer, length);
         return true;
     }
     *tag = tag_from_slice(buffer, length);
     return true;
 }
 
-static void scan_custom_tag_tail(TSLexer *lexer, String *name, const char *prefix, unsigned length) {
+static void scan_custom_tag_tail(TSLexer *lexer, Tag *tag, const char *prefix, unsigned length) {
+    String *name = &tag->custom_tag_name;
+    *name = (String)array_new();
+    tag->inline_size = TAG_HEAP_MARKER;
     array_reserve(name, length + 16);
     if (length > 0) {
         memcpy(name->contents, prefix, length);
@@ -368,12 +395,18 @@ static void scan_custom_tag_tail(TSLexer *lexer, String *name, const char *prefi
 }
 
 static inline Tag tag_from_slice(const char *contents, unsigned size) {
-    Tag tag = {.type = tag_type_for_name_slice(contents, size), .custom_tag_name = array_new()};
-    if (tag.type == CUSTOM && size > 0) {
-        array_reserve(&tag.custom_tag_name, size);
-        memcpy(tag.custom_tag_name.contents, contents, size);
-        tag.custom_tag_name.size = size;
+    Tag tag = {.type = (uint8_t)tag_type_for_name_slice(contents, size), .inline_size = 0};
+    if (tag.type != CUSTOM || size == 0) return tag;
+    if (size <= TAG_INLINE_CAPACITY) {
+        memcpy(tag.inline_name, contents, size);
+        tag.inline_size = (uint8_t)size;
+        return tag;
     }
+    tag.custom_tag_name = (String)array_new();
+    tag.inline_size = TAG_HEAP_MARKER;
+    array_reserve(&tag.custom_tag_name, size);
+    memcpy(tag.custom_tag_name.contents, contents, size);
+    tag.custom_tag_name.size = size;
     return tag;
 }
 
@@ -406,7 +439,7 @@ static int compare_tag_entry(const char *contents, unsigned size, const TagMapEn
 }
 
 static inline void tag_free(Tag *tag) {
-    if (tag->type == CUSTOM) {
+    if (tag->type == CUSTOM && tag->inline_size == TAG_HEAP_MARKER) {
         array_delete(&tag->custom_tag_name);
     }
 }
@@ -416,16 +449,15 @@ static inline bool tag_is_void(const Tag *self) {
 }
 
 static inline bool tag_eq(const Tag *self, const Tag *other) {
-    TagType self_type = self->type == ANNOTATION_XML_HTML ? ANNOTATION_XML : self->type;
-    TagType other_type = other->type == ANNOTATION_XML_HTML ? ANNOTATION_XML : other->type;
+    TagType self_type = self->type == ANNOTATION_XML_HTML ? ANNOTATION_XML : (TagType)self->type;
+    TagType other_type = other->type == ANNOTATION_XML_HTML ? ANNOTATION_XML : (TagType)other->type;
     if (self_type != other_type) return false;
     if (self->type == CUSTOM) {
-        return slice_eq(
-            self->custom_tag_name.contents,
-            self->custom_tag_name.size,
-            other->custom_tag_name.contents,
-            other->custom_tag_name.size
-        );
+        unsigned self_size = 0;
+        unsigned other_size = 0;
+        const char *self_contents = tag_custom_name(self, &self_size);
+        const char *other_contents = tag_custom_name(other, &other_size);
+        return slice_eq(self_contents, self_size, other_contents, other_size);
     }
     return true;
 }
@@ -488,8 +520,7 @@ static inline const char *tag_raw_end_name(const Tag *tag, unsigned *length) {
         *length = 6;
         return "IFRAME";
     }
-    *length = tag->custom_tag_name.size;
-    return tag->custom_tag_name.contents;
+    return tag_custom_name(tag, length);
 }
 
 static inline bool is_tag_name_char(int32_t character) {
