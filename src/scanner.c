@@ -85,7 +85,7 @@ static void pop_tag(Scanner *scanner) {
     scanner->current = scanner->frames.contents[scanner->current - 1].parent;
 }
 
-// The runtime creates a scanner for each full parse and destroys it on reset. Immutable frames keep snapshots
+// The runtime creates a scanner for each parse and destroys it on reset. Immutable frames keep snapshots
 // valid across parse branches without copying or truncating the open tags into the fixed-size serialization buffer.
 static unsigned serialize(Scanner *scanner, char *buffer) {
     memcpy(buffer, &scanner->current, sizeof(scanner->current));

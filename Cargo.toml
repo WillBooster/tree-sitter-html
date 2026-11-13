@@ -4,7 +4,7 @@ autoexamples = false
 categories = ["parser-implementations", "parsing", "text-editors"]
 description = "HTML grammar for tree-sitter"
 edition = "2024"
-keywords = ["incremental", "parsing", "tree-sitter", "html"]
+keywords = ["parsing", "tree-sitter", "html"]
 license = "MIT"
 name = "willbooster-tree-sitter-html"
 readme = "README.md"
@@ -34,4 +34,4 @@ tree-sitter-language = "0.1"
 cc = "1.2"
 
 [dev-dependencies]
-tree-sitter = { package = "willbooster-tree-sitter", version = "19.1.1" }
+tree-sitter = { package = "willbooster-tree-sitter", version = "20.0.0" }
