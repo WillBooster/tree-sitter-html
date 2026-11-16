@@ -853,7 +853,7 @@ static bool is_attribute_whitespace(int32_t character) {
     return (character >= '\t' && character <= '\r') || character == ' ';
 }
 
-void *tree_sitter_html_external_scanner_create() {
+void *tree_sitter_html_external_scanner_create(void) {
     Scanner *scanner = (Scanner *)ts_calloc(1, sizeof(Scanner));
     return scanner;
 }

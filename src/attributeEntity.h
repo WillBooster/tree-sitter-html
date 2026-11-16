@@ -4,10 +4,13 @@
 #include "tree_sitter/parser.h"
 #include "entities.h"
 
+#include <string.h>
+
 static bool scan_numeric_attribute_entity(TSLexer *lexer);
 static bool scan_named_attribute_entity(TSLexer *lexer);
-static const HtmlEntityName *find_html_entity(const char *name);
-static int compare_entity_name(const char *left, const char *right);
+static bool find_html_entity(const char *name, unsigned length, bool *legacy);
+static int compare_entity_suffix(const char *left, unsigned left_length, const char *right, unsigned right_length);
+static bool html_entity_alpha(int32_t character);
 static bool html_entity_digit(int32_t character, bool hexadecimal);
 
 static bool scan_attribute_entity(TSLexer *lexer, TSSymbol symbol, TSSymbol ampersand) {
@@ -40,48 +43,56 @@ static bool scan_numeric_attribute_entity(TSLexer *lexer) {
 }
 
 static bool scan_named_attribute_entity(TSLexer *lexer) {
-    char name[HTML_ENTITY_NAME_MAX_LENGTH + 1];
+    if (!html_entity_alpha(lexer->lookahead)) {
+        return false;
+    }
+    char name[HTML_ENTITY_NAME_MAX_LENGTH];
     unsigned length = 0;
-    while ((lexer->lookahead >= 'a' && lexer->lookahead <= 'z') ||
-           (lexer->lookahead >= 'A' && lexer->lookahead <= 'Z') ||
-           (lexer->lookahead >= '0' && lexer->lookahead <= '9')) {
+    do {
         if (length == HTML_ENTITY_NAME_MAX_LENGTH) {
             return false;
         }
         name[length++] = (char)lexer->lookahead;
         lexer->advance(lexer, false);
-    }
-    if (length == 0) {
-        return false;
-    }
-    name[length] = '\0';
-    const HtmlEntityName *match = find_html_entity(name);
-    return match && (lexer->lookahead == ';' || (match->legacy && lexer->lookahead != '='));
+    } while (html_entity_alpha(lexer->lookahead) ||
+             (lexer->lookahead >= '0' && lexer->lookahead <= '9'));
+
+    bool legacy = false;
+    return find_html_entity(name, length, &legacy) &&
+           (lexer->lookahead == ';' || (legacy && lexer->lookahead != '='));
 }
 
-static const HtmlEntityName *find_html_entity(const char *name) {
-    unsigned low = 0;
-    unsigned high = sizeof(HTML_ENTITY_NAMES) / sizeof(HTML_ENTITY_NAMES[0]);
+static bool find_html_entity(const char *name, unsigned length, bool *legacy) {
+    unsigned bucket = (unsigned)((uint8_t)name[0] - (uint8_t)'A');
+    unsigned low = HTML_ENTITY_FIRST_CHAR_OFFSET[bucket];
+    unsigned high = HTML_ENTITY_FIRST_CHAR_OFFSET[bucket + 1];
+    const char *suffix = name + 1;
+    unsigned suffix_length = length - 1;
     while (low < high) {
         unsigned middle = low + (high - low) / 2;
-        int order = compare_entity_name(name, HTML_ENTITY_NAMES[middle].name);
+        unsigned start = HTML_ENTITY_ENTRIES[middle] >> 1;
+        unsigned entry_length = (HTML_ENTITY_ENTRIES[middle + 1] >> 1) - start;
+        int order = compare_entity_suffix(suffix, suffix_length, HTML_ENTITY_SUFFIXES + start, entry_length);
         if (order < 0) {
             high = middle;
         } else if (order > 0) {
             low = middle + 1;
         } else {
-            return &HTML_ENTITY_NAMES[middle];
+            *legacy = (HTML_ENTITY_ENTRIES[middle] & 1) != 0;
+            return true;
         }
     }
-    return NULL;
+    return false;
 }
 
-static int compare_entity_name(const char *left, const char *right) {
-    while (*left && *left == *right) {
-        left++;
-        right++;
-    }
-    return (uint8_t)*left - (uint8_t)*right;
+static int compare_entity_suffix(const char *left, unsigned left_length, const char *right, unsigned right_length) {
+    unsigned min_length = left_length < right_length ? left_length : right_length;
+    int order = min_length > 0 ? memcmp(left, right, min_length) : 0;
+    return order != 0 ? order : (int)left_length - (int)right_length;
+}
+
+static bool html_entity_alpha(int32_t character) {
+    return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z');
 }
 
 static bool html_entity_digit(int32_t character, bool hexadecimal) {
