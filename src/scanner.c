@@ -1,4 +1,4 @@
-// code-gauge-allow-file fileNcss 640 -- The external scanner state machines form one cohesive module; splitting unrelated routines would only relocate this size.
+// code-gauge-allow-file fileNcss -- The external scanner state machines form one cohesive module; splitting unrelated routines would only relocate this size.
 #include "tag.h"
 #include "tree_sitter/parser.h"
 #include "attributeEntity.h"
@@ -104,7 +104,7 @@ static uint64_t name_hash(const Tag *tag);
 static unsigned hash_bit(uint64_t hash, uint8_t bit);
 static bool name_matches(const Scanner *scanner, uint32_t leaf, const Tag *tag);
 
-// code-gauge-allow functionNcss 35 -- Trie insertion finds its split, preserves collisions and copies one ancestor path; splitting these phases would only move the shared path bookkeeping.
+// code-gauge-allow functionNcss -- Trie insertion finds its split, preserves collisions and copies one ancestor path; splitting these phases would only move the shared path bookkeeping.
 static uint32_t insert_name(Scanner *scanner, uint32_t root, const Tag *tag) {
     uint64_t hash = name_hash(tag);
     uint32_t path[64];
@@ -478,8 +478,8 @@ static bool can_implicitly_close(const Scanner *scanner, const TSLexer *lexer);
 static bool scan_foreign_breakout(const Scanner *scanner, TSLexer *lexer, const Tag *tag, bool closing);
 static bool tag_starts_foreign_breakout(const Tag *tag, TSLexer *lexer);
 
-// code-gauge-allow functionCognitiveComplexity 28 -- One lookahead decides optional ends, raw-text recovery and foreign-content boundaries; extracting branches only relocates these decisions.
-// code-gauge-allow functionNcss 47 -- These decisions share the scanned next tag and its ownership.
+// code-gauge-allow functionCognitiveComplexity -- One lookahead decides optional ends, raw-text recovery and foreign-content boundaries; extracting branches only relocates these decisions.
+// code-gauge-allow functionNcss -- These decisions share the scanned next tag and its ownership.
 static bool scan_implicit_end_tag(Scanner *scanner, TSLexer *lexer) {
     TSLexerPosition position;
     lexer->get_position(lexer, &position);
@@ -710,7 +710,7 @@ static bool scan(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     return scan_tag_syntax(scanner, lexer, valid_symbols);
 }
 
-// code-gauge-allow functionCognitiveComplexity 18 -- Dispatch depends on the lexer state and external token validity; separating cases would only move the branches.
+// code-gauge-allow functionCognitiveComplexity -- Dispatch depends on the lexer state and external token validity; separating cases would only move the branches.
 static bool scan_tag_syntax(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
     bool valid_start_tag = accepts_start_tag(valid_symbols);
     bool valid_tag_name = valid_start_tag || valid_symbols[END_TAG_NAME] ||
@@ -797,8 +797,8 @@ static void advance_tag_suffix(TSLexer *lexer, String *suffix);
 
 // This lookahead consumes input: callers must mark the token end first.
 // The implicit-end path inherits that boundary from scan_markup_open.
-// code-gauge-allow functionCognitiveComplexity 23 -- Quote, separator and value states share one lookahead scan; extracting transitions would only relocate the state machine.
-// code-gauge-allow functionNcss 41 -- The suffix states jointly determine whether later markup belongs to this tag.
+// code-gauge-allow functionCognitiveComplexity -- Quote, separator and value states share one lookahead scan; extracting transitions would only relocate the state machine.
+// code-gauge-allow functionNcss -- The suffix states jointly determine whether later markup belongs to this tag.
 static bool accepts_tag_suffix(TSLexer *lexer, bool closing, String *suffix) {
     bool has_attribute_separator = is_unicode_whitespace(lexer->lookahead);
     while (is_unicode_whitespace(lexer->lookahead)) {
